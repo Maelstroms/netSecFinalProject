@@ -1,4 +1,5 @@
-# chat_server.py
+# server.py
+#python server.py -sp 9090
 
 import sys
 import socket
@@ -13,7 +14,13 @@ def arguments(arglist):
 args = arguments(sys.argv[1:])
 HOST = ''
 SOCKET_LIST = []
-CLIENT_LIST = []
+#Client list tracks online users
+CLIENT_LIST = {}
+#user list with passwords
+USER_LIST = {'Alice':1,
+            'Bob':2,
+            'Carole':3,
+            'Eve':4}
 RECV_BUFFER = 4096
 PORT = args.port
 
@@ -38,10 +45,11 @@ def chat_server():
         for sock in ready_to_read:
             # a new connection request recieved
             if sock == server_socket:
+                print("got a hit")
                 sockfd, addr = server_socket.accept()
                 SOCKET_LIST.append(sockfd)
                 newUser = sockfd.recv(RECV_BUFFER)
-                CLIENT_LIST.append(newUser)
+                CLIENT_LIST[sockfd] = newUser
                 #print "adress is " + str(addr.append(newUser))
                 print "Client (%s, %s) connected" % addr
                 print SOCKET_LIST
@@ -53,39 +61,22 @@ def chat_server():
                     # CLIENT_LIST.append(newUser)
 
 
-            # a message from a client, not a new connection
+            #not a new connection
             else:
                 # process data recieved from client,
                 try:
                     # receiving data from the socket.
                     data = sock.recv(RECV_BUFFER)
                     if data:
-                        if str(data) == "list\n":
-                            #received list command
-                            print("received list command")
-                            sock.send("Signed In Users: " +str(CLIENT_LIST)+"\n")
-                        elif data[:4] == "send":
-                            print("get send")
-                            sending = data.split()
-                            for name in CLIENT_LIST:
-                                if sending[1] == name:
-                                    print("received send command")
-                                    SOCKET_LIST[CLIENT_LIST.index(name)+1].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
-                                    #break
-                            # else:
-                            #     continue
-                        else:
-                            # there is something in the socket
-                            print(data)
-                            print(CLIENT_LIST[SOCKET_LIST.index(sock) - 1])
-                            broadcast(server_socket, sock, "\r" + '[FROM' + str(sock.getpeername()) + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + '] ' + data)
+                        pass
                     else:
                         # remove the socket that's broken
                         if sock in SOCKET_LIST:
+                            del CLIENT_LIST[sock]
                             SOCKET_LIST.remove(sock)
 
                         # at this stage, no data means probably the connection has been broken
-                        broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n" )
+                        #broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n" )
 
                 # exception
                 except Exception as inst:
@@ -93,7 +84,7 @@ def chat_server():
                     print(inst.args)     # arguments stored in .args
                     print(inst)          # __str__ allows args to be printed directly,
                                          # but may be overridden in exception subclasses
-                    broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n")#this on defaults
+                    #broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n")#this on defaults
                     continue
 
     server_socket.close()
@@ -102,10 +93,13 @@ def chat_server():
 def broadcast (server_socket, sock, message):
     for socket in SOCKET_LIST:
         # send the message only to peer
-        if socket != server_socket and socket != sock :
+        if socket != server_socket:
+            print("working?")
             try :
+                print("yay")
                 socket.send(message)
             except :
+                print("nay")
                 # broken socket connection
                 socket.close()
                 # broken socket, remove it
