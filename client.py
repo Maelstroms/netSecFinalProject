@@ -61,7 +61,6 @@ def connect_to_peer(addr):
 
 def chat_client():
     PEER_LIST = {}
-    sys.stdout.write('[ME] >'); sys.stdout.flush()
     while 1:
 
         # get the list sockets which are ready to be read through select
@@ -71,7 +70,7 @@ def chat_client():
 
 
         for sock in ready_to_read:
-            print PEER_LIST
+            print "ya?"
         # process data recieved from client,
             try:
                 # receiving data from the socket.
@@ -100,34 +99,34 @@ def chat_client():
                                      # but may be overridden in exception subclasses
 
 
-            msg = sys.stdin.readline()
-            if str(msg) == "list\n":
-                #received list command
-                                print("received list command")
-                                print PEER_LIST
-                                for peer in PEER_LIST:
-                                    print(peer)
-                                sys.stdout.write('[ME] >'); sys.stdout.flush()
-            elif str(msg[:4]) == "send":
-                                print("get send")
-                                sending = data.split()
-                                for name in PEER_LIST:
-                                    if sending[1] == name:
-                                        print("received send command")
-                                        SOCKET_LIST[PEER_LIST.index(name)+1].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
-                                        sys.stdout.write('[ME] >'); sys.stdout.flush()
-
-            else:
-                #print("Unrecognized command")
-                sys.stdout.write('[ME] >'); sys.stdout.flush()
+        msg = sys.stdin.readline()
+        if str(msg) == "list\n":
+            #received list command
+            print("received list command")
+            print PEER_LIST
+            for peer in PEER_LIST:
+                print(peer)
+            sys.stdout.write('[ME] >'); sys.stdout.flush()
+        elif str(msg[:4]) == "send":
+            print("get send")
+            sending = data.split()
+            for name in PEER_LIST:
+                if sending[1] == name:
+                    print("received send command")
+                    SOCKET_LIST[PEER_LIST.index(name)+1].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                    sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
-
-
+        else:
+            print "did we hit?"
+            #print("Unrecognized command")
+            sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
 
-    server_socket.close()
+
+
+
 
 if __name__ == "__main__":
     #user1$ python ChatClient.py -u Alice -sip server-ip -sp 9090
