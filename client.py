@@ -1,10 +1,11 @@
 # chat_client.py
-#python client.py -u Alice -sip 9090 -sp 3000
+#python client.py -u Alice -sip 127.0.0.1 -sp 3000
 
 import sys
 import socket
 import select
 import argparse
+import json
 
 PEER_LIST = {}
 SOCKET_LIST =[]
@@ -25,7 +26,6 @@ def server_authentication(args):
     user = args.user
     server = args.server
     port = args.port
-    PEER_LIST[user]=1
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.settimeout(2)
@@ -44,60 +44,87 @@ def server_authentication(args):
     print 'Connected to remote server. You can start sending messages'
 
 
+def connect_to_peer(addr):
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(2)
+
+    # connect to remote server
+    try :
+        s.connect((addr[0], addr[1]))
+    except :
+        print 'Unable to connect'
+        sys.exit()
+
+    SOCKET_LIST.append(s)
+
+
 
 def chat_client():
-    print(SOCKET_LIST)
-    print(PEER_LIST)
+    PEER_LIST = {}
     sys.stdout.write('[ME] >'); sys.stdout.flush()
     while 1:
 
         # get the list sockets which are ready to be read through select
         # 4th arg, time_out  = 0 : poll and never block
         ready_to_read,ready_to_write,in_error = select.select(SOCKET_LIST,[],[],0)
+        #print SOCKET_LIST
 
-
-        msg = sys.stdin.readline()
-        if str(msg) == "list\n":
-            #received list command
-                            print("received list command")
-                            for peer in PEER_LIST:
-                                print(peer)
-                            sys.stdout.write('[ME] >'); sys.stdout.flush()
-        elif str(msg[:4]) == "send":
-                            print("get send")
-                            sending = data.split()
-                            for name in CLIENT_LIST:
-                                if sending[1] == name:
-                                    print("received send command")
-                                    SOCKET_LIST[CLIENT_LIST.index(name)+1].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
-                                    sys.stdout.write('[ME] >'); sys.stdout.flush()
-                                    #break
-        else:
-            print("Unrecognized command")
-            sys.stdout.write('[ME] >'); sys.stdout.flush()
-            continue
 
         for sock in ready_to_read:
-                # process data recieved from client,
-                try:
-                    # receiving data from the socket.
-                    data = sock.recv(RECV_BUFFER)
-                    if data:
-                        sys.stdout.write(data)
-                        sys.stdout.write('[ME] >'); sys.stdout.flush()
-                    else:
-                        # remove the socket that's broken
-                        if sock in SOCKET_LIST:
-                            SOCKET_LIST.remove(sock)
+            print PEER_LIST
+        # process data recieved from client,
+            try:
+                # receiving data from the socket.
+                data = sock.recv(RECV_BUFFER)
+                if data:
+                    sys.stdout.write("\n")
+                    # this may need to change
+                    pack = json.loads(data)
+                    for key in pack:
+                        if key == 'peer':
+                            PEER_LIST = pack[key]
+                    sys.stdout.write(data)
+                    sys.stdout.flush()
+                    sys.stdout.write('\n[ME] >'); sys.stdout.flush()
+                else:
+                    # remove the socket that's broken
+                    print "we killed the socket"
+                    if sock in SOCKET_LIST:
+                        SOCKET_LIST.remove(sock)
+
+                        # exception
+            except Exception as inst:
+                print(type(inst))    # the exception instance
+                print(inst.args)     # arguments stored in .args
+                print(inst)          # __str__ allows args to be printed directly,
+                                     # but may be overridden in exception subclasses
 
 
-                # exception
-                except Exception as inst:
-                    print(type(inst))    # the exception instance
-                    print(inst.args)     # arguments stored in .args
-                    print(inst)          # __str__ allows args to be printed directly,
-                                         # but may be overridden in exception subclasses
-                    break
+            msg = sys.stdin.readline()
+            if str(msg) == "list\n":
+                #received list command
+                                print("received list command")
+                                print PEER_LIST
+                                for peer in PEER_LIST:
+                                    print(peer)
+                                sys.stdout.write('[ME] >'); sys.stdout.flush()
+            elif str(msg[:4]) == "send":
+                                print("get send")
+                                sending = data.split()
+                                for name in PEER_LIST:
+                                    if sending[1] == name:
+                                        print("received send command")
+                                        SOCKET_LIST[PEER_LIST.index(name)+1].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                                        sys.stdout.write('[ME] >'); sys.stdout.flush()
+
+            else:
+                #print("Unrecognized command")
+                sys.stdout.write('[ME] >'); sys.stdout.flush()
+
+
+
+
+
 
 
     server_socket.close()

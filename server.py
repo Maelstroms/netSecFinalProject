@@ -5,6 +5,7 @@ import sys
 import socket
 import select
 import argparse
+import json
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
@@ -49,13 +50,15 @@ def chat_server():
                 sockfd, addr = server_socket.accept()
                 SOCKET_LIST.append(sockfd)
                 newUser = sockfd.recv(RECV_BUFFER)
-                CLIENT_LIST[sockfd] = newUser
+                CLIENT_LIST[newUser] = addr
                 #print "adress is " + str(addr.append(newUser))
                 print "Client (%s, %s) connected" % addr
                 print SOCKET_LIST
                 print CLIENT_LIST
-
-                broadcast(server_socket, sockfd, "[%s:%s] entered our chatting room\n" % addr)
+                brd = {"peer": CLIENT_LIST}
+                brd = json.dumps(brd)
+                print brd
+                broadcast(server_socket, sockfd, brd)
 
                     # newUser = sock.recv(RECV_BUFFER)
                     # CLIENT_LIST.append(newUser)
@@ -72,8 +75,9 @@ def chat_server():
                     else:
                         # remove the socket that's broken
                         if sock in SOCKET_LIST:
-                            del CLIENT_LIST[sock]
                             SOCKET_LIST.remove(sock)
+                            break
+
 
                         # at this stage, no data means probably the connection has been broken
                         #broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n" )
@@ -85,11 +89,11 @@ def chat_server():
                     print(inst)          # __str__ allows args to be printed directly,
                                          # but may be overridden in exception subclasses
                     #broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n")#this on defaults
-                    continue
+                    break
 
     server_socket.close()
 
-# broadcast chat messages to all connected clients
+# broadcast chat messages to all connected clients, here for development purposes
 def broadcast (server_socket, sock, message):
     for socket in SOCKET_LIST:
         # send the message only to peer
@@ -104,6 +108,7 @@ def broadcast (server_socket, sock, message):
                 socket.close()
                 # broken socket, remove it
                 if socket in SOCKET_LIST:
+                    pass
                     SOCKET_LIST.remove(socket)
 
 if __name__ == "__main__":
