@@ -8,6 +8,7 @@ import argparse
 import json
 
 PEER_LIST = {}
+PEER_SOCKETS = {}
 SOCKET_LIST =[]
 RECV_BUFFER = 4096
 
@@ -21,15 +22,14 @@ def arguments(arglist):
 
 
 
-def server_authentication(args):
-
+def server_authentication(args, s):
     user = args.user
     server = args.server
     port = args.port
+    print s
 
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2)
 
+    #s.connect(())
     # connect to remote server
     try :
         s.connect((server, port))
@@ -44,11 +44,10 @@ def server_authentication(args):
     print 'Connected to remote server. You can start sending messages'
 
 
-def connect_to_peer(addr):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2)
+def connect_to_peer(name, addr, s):
 
-    # connect to remote server
+
+    # connect to peer server
     try :
         s.connect((addr[0], addr[1]))
     except :
@@ -56,11 +55,17 @@ def connect_to_peer(addr):
         sys.exit()
 
     SOCKET_LIST.append(s)
+    PEER_SOCKETS[name] = s
 
 
 
-def chat_client():
+def chat_client(args):
     PEER_LIST = {}
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(2)
+    server_authentication(args, s)
+
+    sys.stdout.write('[ME] >'); sys.stdout.flush()
     while 1:
 
         # get the list sockets which are ready to be read through select
@@ -82,6 +87,9 @@ def chat_client():
                     for key in pack:
                         if key == 'peer':
                             PEER_LIST = pack[key]
+                    #this is probably temporary
+                    del PEER_LIST[args.user]
+                    print PEER_LIST
                     sys.stdout.write(data)
                     sys.stdout.flush()
                     sys.stdout.write('\n[ME] >'); sys.stdout.flush()
@@ -104,16 +112,24 @@ def chat_client():
             #received list command
             print("received list command")
             print PEER_LIST
-            for peer in PEER_LIST:
-                print(peer)
             sys.stdout.write('[ME] >'); sys.stdout.flush()
         elif str(msg[:4]) == "send":
             print("get send")
-            sending = data.split()
+            sending = msg.split()
             for name in PEER_LIST:
+                print sending
+                print sending[1]
+
                 if sending[1] == name:
                     print("received send command")
-                    SOCKET_LIST[PEER_LIST.index(name)+1].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                    if name in PEER_SOCKETS:
+                        PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                    else:
+                        connect_to_peer(name, PEER_LIST[name],s)
+                        PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                    sys.stdout.write('[ME] >'); sys.stdout.flush()
+                else:
+                    print "error, no such user"
                     sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
@@ -132,5 +148,4 @@ if __name__ == "__main__":
     #user1$ python ChatClient.py -u Alice -sip server-ip -sp 9090
 
     args = arguments(sys.argv[1:])
-    server_authentication(args)
-    sys.exit(chat_client())
+    sys.exit(chat_client(args))
