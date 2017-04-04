@@ -49,8 +49,9 @@ def chat_server():
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
                 SOCKET_LIST.append(sockfd)
-                newUser = sockfd.recv(RECV_BUFFER)
-                CLIENT_LIST[newUser] = addr
+                newUser = json.loads(sockfd.recv(RECV_BUFFER))
+                user_name = newUser.keys()[0]
+                CLIENT_LIST[user_name] = newUser[user_name]
                 #print "adress is " + str(addr.append(newUser))
                 print "Client (%s, %s) connected" % addr
                 print SOCKET_LIST

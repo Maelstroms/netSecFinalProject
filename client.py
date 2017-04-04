@@ -6,11 +6,14 @@ import socket
 import select
 import argparse
 import json
+import random
 
 PEER_LIST = {}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
 RECV_BUFFER = 4096
+HOST = ''
+PORT = random.randint(0,65535)
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
@@ -22,48 +25,65 @@ def arguments(arglist):
 
 
 
-def server_authentication(args, s):
+def server_authentication(args):
     user = args.user
-    server = args.server
+    server_address = args.server
     port = args.port
-    print s
 
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.settimeout(2)
+    print 'hell'
 
-    #s.connect(())
     # connect to remote server
     try :
-        s.connect((server, port))
+        server_socket.connect((server_address, port))
     except :
         print 'Unable to connect'
         sys.exit()
 
 
-
-    s.send(user)
-    SOCKET_LIST.append(s)
+    first_packet = json.dumps(PEER_LIST)
+    server_socket.send(first_packet)
+    SOCKET_LIST.append(server_socket)
+    PEER_SOCKETS['server'] = server_socket
     print 'Connected to remote server. You can start sending messages'
 
 
-def connect_to_peer(name, addr, s):
-
+def connect_to_peer(name, addr):
+    print name
+    print addr
+    print addr[0]
+    print addr[1]
+    new_peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    new_peer_socket.settimeout(2)
 
     # connect to peer server
     try :
-        s.connect((addr[0], addr[1]))
+        new_peer_socket.connect((addr[0], addr[1]))
     except :
         print 'Unable to connect'
         sys.exit()
 
-    SOCKET_LIST.append(s)
-    PEER_SOCKETS[name] = s
+    SOCKET_LIST.append(new_peer_socket)
+    PEER_SOCKETS[name] = new_peer_socket
 
 
 
 def chat_client(args):
-    PEER_LIST = {}
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(2)
-    server_authentication(args, s)
+    #PEER_LIST = {args.user: ('127.0.0.1', PORT)}
+    global PEER_LIST
+    PEER_LIST[args.user] = ('127.0.0.1', PORT)
+
+    receiving_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    receiving_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    receiving_socket.bind((HOST, PORT))
+    receiving_socket.listen(10)
+    SOCKET_LIST.append(receiving_socket)
+
+
+    server_authentication(args)
+
+
 
     sys.stdout.write('[ME] >'); sys.stdout.flush()
     while 1:
@@ -76,35 +96,39 @@ def chat_client(args):
 
         for sock in ready_to_read:
             print "ya?"
+            if sock == receiving_socket:
+                print "got the listener"
+                sockfd, addr = receiving_socket.accept()
+                SOCKET_LIST.append(sockfd)
         # process data recieved from client,
-            try:
-                # receiving data from the socket.
-                data = sock.recv(RECV_BUFFER)
-                if data:
-                    sys.stdout.write("\n")
-                    # this may need to change
-                    pack = json.loads(data)
-                    for key in pack:
-                        if key == 'peer':
-                            PEER_LIST = pack[key]
-                    #this is probably temporary
-                    del PEER_LIST[args.user]
-                    print PEER_LIST
-                    sys.stdout.write(data)
-                    sys.stdout.flush()
-                    sys.stdout.write('\n[ME] >'); sys.stdout.flush()
-                else:
-                    # remove the socket that's broken
-                    print "we killed the socket"
-                    if sock in SOCKET_LIST:
-                        SOCKET_LIST.remove(sock)
+            else:
+                try:
+                    # receiving data from the socket.
+                    data = sock.recv(RECV_BUFFER)
+                    if data:
+                        sys.stdout.write("\n")
+                        # this may need to change
+                        pack = json.loads(data)
+                        for key in pack:
+                            if key == 'peer':
+                                PEER_LIST = pack[key]
+                        #this is probably temporary
+                        print PEER_LIST
+                        sys.stdout.write(data)
+                        sys.stdout.flush()
+                        sys.stdout.write('\n[ME] >'); sys.stdout.flush()
+                    else:
+                        # remove the socket that's broken
+                        print "we killed the socket"
+                        if sock in SOCKET_LIST:
+                            SOCKET_LIST.remove(sock)
 
-                        # exception
-            except Exception as inst:
-                print(type(inst))    # the exception instance
-                print(inst.args)     # arguments stored in .args
-                print(inst)          # __str__ allows args to be printed directly,
-                                     # but may be overridden in exception subclasses
+                            # exception
+                except Exception as inst:
+                    print(type(inst))    # the exception instance
+                    print(inst.args)     # arguments stored in .args
+                    print(inst)          # __str__ allows args to be printed directly,
+                                         # but may be overridden in exception subclasses
 
 
         msg = sys.stdin.readline()
@@ -119,14 +143,18 @@ def chat_client(args):
             for name in PEER_LIST:
                 print sending
                 print sending[1]
-
+                packet = json.dumps({"origin": [args.user, PEER_LIST[args.user]], "message": sending[2]})
+                print packet
                 if sending[1] == name:
                     print("received send command")
                     if name in PEER_SOCKETS:
-                        PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                        print "sending to existing peer"
+                        PEER_SOCKETS[name].send(packet)
+                        #PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
                     else:
-                        connect_to_peer(name, PEER_LIST[name],s)
-                        PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                        print "need to connect to new peer"
+                        connect_to_peer(name, PEER_LIST[name])
+                        PEER_SOCKETS[name].send(packet)
                     sys.stdout.write('[ME] >'); sys.stdout.flush()
                 else:
                     print "error, no such user"
