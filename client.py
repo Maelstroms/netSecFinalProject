@@ -1,5 +1,7 @@
 # chat_client.py
-#python client.py -u Alice -sip 127.0.0.1 -sp 3000
+#python client.py -u Alice -p 1 -sip 127.0.0.1 -sp 3000
+#python client.py -u Alice -pp 9090
+#python client.py -u Bob -pp 9091
 
 import sys
 import socket
@@ -7,8 +9,10 @@ import select
 import argparse
 import json
 import random
+import threading
+import Queue
 
-PEER_LIST = {}
+PEER_LIST = {'Alice':('127.0.0.1', 9090),'Bob':('127.0.0.1', 9091)}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
 RECV_BUFFER = 4096
@@ -19,11 +23,14 @@ def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
     parser.add_argument('-u', required=True, dest='user', help="User to be logged into server")
     #parser.add_argument('-p', required=True, dest='userPass', help="User password for server authentication")
-    parser.add_argument('-sip', required=True, dest='server', help="IP address of the server")
-    parser.add_argument('-sp', required=True, dest='port', type=int, help="port to connect to server")
+    #parser.add_argument('-sip', required=True, dest='server', help="IP address of the server")
+    #parser.add_argument('-sp', required=True, dest='port', type=int, help="port to connect to server")
+    parser.add_argument('-pp', required=True, dest='port', type=int, help="port for listening socket, testing only")
     return parser.parse_args(arglist)
 
-
+def read_stdin(input_queue):
+    while True:
+        input_queue.put(sys.stdin.readline())
 
 def server_authentication(args):
     user = args.user
@@ -32,7 +39,6 @@ def server_authentication(args):
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.settimeout(2)
-    print 'hell'
 
     # connect to remote server
     try :
@@ -67,9 +73,13 @@ def connect_to_peer(name, addr):
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
 
+def peer_to_peer_encryption():
+    pass
 
 
 def chat_client(args):
+    #for testing REMEMBER TO REMOVE
+    PORT = args.port
     #PEER_LIST = {args.user: ('127.0.0.1', PORT)}
     global PEER_LIST
     PEER_LIST[args.user] = ('127.0.0.1', PORT)
@@ -79,13 +89,16 @@ def chat_client(args):
     receiving_socket.bind((HOST, PORT))
     receiving_socket.listen(10)
     SOCKET_LIST.append(receiving_socket)
+    input_queue = Queue.Queue()
 
-
-    server_authentication(args)
+    #server_authentication(args)
 
 
 
     sys.stdout.write('[ME] >'); sys.stdout.flush()
+    input_thread = threading.Thread(target=read_stdin, args=(input_queue,))
+    input_thread.daemon = True
+    input_thread.start()
     while 1:
 
         # get the list sockets which are ready to be read through select
@@ -131,40 +144,44 @@ def chat_client(args):
                                          # but may be overridden in exception subclasses
 
 
-        msg = sys.stdin.readline()
-        if str(msg) == "list\n":
-            #received list command
-            print("received list command")
-            print PEER_LIST
-            sys.stdout.write('[ME] >'); sys.stdout.flush()
-        elif str(msg[:4]) == "send":
-            print("get send")
-            sending = msg.split()
-            for name in PEER_LIST:
-                print sending
-                print sending[1]
-                packet = json.dumps({"origin": [args.user, PEER_LIST[args.user]], "message": sending[2]})
-                print packet
-                if sending[1] == name:
-                    print("received send command")
-                    if name in PEER_SOCKETS:
-                        print "sending to existing peer"
-                        PEER_SOCKETS[name].send(packet)
-                        #PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+        #msg = sys.stdin.readline()
+
+        if not input_queue.empty():
+            msg = input_queue.get()
+            print msg
+            if str(msg) == "list\n":
+                #received list command
+                print("received list command")
+                print PEER_LIST
+                sys.stdout.write('[ME] >'); sys.stdout.flush()
+            elif str(msg[:4]) == "send":
+                print("get send")
+                sending = msg.split()
+                for name in PEER_LIST:
+                    print sending
+                    print sending[1]
+                    packet = json.dumps({"origin": [args.user, PEER_LIST[args.user]], "message": sending[2]})
+                    print packet
+                    if sending[1] == name:
+                        print("received send command")
+                        if name in PEER_SOCKETS:
+                            print "sending to existing peer"
+                            PEER_SOCKETS[name].send(packet)
+                            #PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                        else:
+                            print "need to connect to new peer"
+                            connect_to_peer(name, PEER_LIST[name])
+                            PEER_SOCKETS[name].send(packet)
+                        sys.stdout.write('[ME] >'); sys.stdout.flush()
                     else:
-                        print "need to connect to new peer"
-                        connect_to_peer(name, PEER_LIST[name])
-                        PEER_SOCKETS[name].send(packet)
-                    sys.stdout.write('[ME] >'); sys.stdout.flush()
-                else:
-                    print "error, no such user"
-                    sys.stdout.write('[ME] >'); sys.stdout.flush()
+                        print "error, no such user"
+                        sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
-        else:
-            print "did we hit?"
-            #print("Unrecognized command")
-            sys.stdout.write('[ME] >'); sys.stdout.flush()
+            else:
+                print "did we hit?"
+                #print("Unrecognized command")
+                sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
 

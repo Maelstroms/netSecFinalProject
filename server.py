@@ -22,6 +22,7 @@ USER_LIST = {'Alice':1,
             'Bob':2,
             'Carole':3,
             'Eve':4}
+USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':127.0.0.1,'session_key':54784}}
 RECV_BUFFER = 4096
 PORT = args.port
 
@@ -49,6 +50,7 @@ def chat_server():
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
                 SOCKET_LIST.append(sockfd)
+                #receive new user credentials
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 user_name = newUser.keys()[0]
                 CLIENT_LIST[user_name] = newUser[user_name]
