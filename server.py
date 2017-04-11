@@ -57,12 +57,19 @@ def connect_user_to_peer(request):
     peer = unpack['name']
     Na = unpack['nonce'] + 1
     shared_secret= random.randint(0,65535)
+    #packet to be sent back to client
+    #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
     peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
-    prep = {}
-    packet = json.dumps({'connection': {peer: CLIENT_LIST[peer], 'N+1': Na}})
+    prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'N+1': Na}
+    packet = json.dumps({'connection': prep})
     print packet
     CLIENT_SOCKETS[user].send(packet)
 
+def confirm_connection(request):
+    packet = request['peer_confirmation']
+    peer = packet['tgt']
+    confirmation = {'NS+1': packet['nonce']+1}
+    CLIENT_SOCKETS[peer].send(json.dumps(confirmation))
 
 def chat_server():
 
@@ -120,7 +127,15 @@ def chat_server():
                         request = json.loads(data)
                         print request
                         #received request to connect to peer
-                        connect_user_to_peer(request)
+                        for key in request:
+                            if key == 'request':
+                                connect_user_to_peer(request)
+                            elif key == 'peer_confirmation':
+                                print request
+                                confirm_connection(request)
+
+
+                        #'peer_confirmation'
                         print 'should be dead'
                     else:
                         # remove the socket that's broken

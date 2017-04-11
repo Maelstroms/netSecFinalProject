@@ -28,6 +28,7 @@ SOCKET_LIST =[]
 RECV_BUFFER = 4096
 HOST = ''
 PORT = random.randint(0,65535)
+MESSAGE_QUEUE = []
 #for testing P2P encryption
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
@@ -61,7 +62,7 @@ def server_authentication(args):
         print 'Unable to connect'
         sys.exit()
 
-    packet = {args.user: PEER_LIST[args.user]}
+    packet = {user: PEER_LIST[user]}
     first_packet = json.dumps(packet)
     server_socket.send(first_packet)
     SOCKET_LIST.append(server_socket)
@@ -75,15 +76,28 @@ def find_peer_from_server(args, peer_name):
     #encrypt()
     PEER_SOCKETS['server'].send(packet)
 
+def confirm_with_server(connection_message):
+    #{Ns+1 || TGT(bob) || Nb}Sb
+    packet = {}
+    for key in connection_message:
+        packet[key] = connection_message[key]
+    packet['Ns'] = packet['Ns']+1
+    packet['nonce'] = random.randint(0,65535)
+    del packet['peer']
+    del packet['Kab']
+    ready = {'peer_confirmation': packet}
+    PEER_SOCKETS['server'].send(json.dumps(ready))
 
-def connect_to_peer(name, addr):
+def connect_to_peer(args, connection_packet):
+    pack = connection_packet['connection']
+    print pack
+    name = pack['peer'][0]
+    addr =pack['peer'][1]
     print 'connecting to peer'
     print name
     print addr
     print addr[0]
     print addr[1]
-
-
 
     new_peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     new_peer_socket.settimeout(2)
@@ -95,9 +109,14 @@ def connect_to_peer(name, addr):
         print 'Unable to connect'
         sys.exit()
 
+    pack['peer_packet']['peer'] = args.user
+    new_peer_socket.send(json.dumps(pack['peer_packet']))
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
 
+def format_peer_communication(message):
+    packet = {'recipient':message[2], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
+    MESSAGE_QUEUE.append(packet)
 
 
 # def encryption():
@@ -124,6 +143,7 @@ def connect_to_peer(name, addr):
 def chat_client(args):
     #for testing REMEMBER TO REMOVE
     PORT = args.send_port
+
     #PEER_LIST = {args.user: ('127.0.0.1', PORT)}
     #I don't know why I needed to declare this global, it suddenly stopped working until I did this
     global PEER_LIST
@@ -162,8 +182,16 @@ def chat_client(args):
             print "ya?"
             if sock == receiving_socket:
                 print "got the listener"
+                #verify new connection
                 sockfd, addr = receiving_socket.accept()
+                new_peer = json.loads(sockfd.recv(RECV_BUFFER))
+                print new_peer
+                confirm_with_server(new_peer)
                 SOCKET_LIST.append(sockfd)
+                PEER_SOCKETS[new_peer['peer']] = sockfd
+                PEER_LIST[new_peer['peer']] = addr
+
+
         # process data recieved from client,
             else:
                 try:
@@ -174,11 +202,18 @@ def chat_client(args):
                         sys.stdout.write("\n")
                         # this may need to change
                         pack = json.loads(data)
-                        # for key in pack:
-                        #     if key == 'peer':
+                        for key in pack:
+                            if key == 'peer':
+                                print 'peers'
+                            elif key == 'connection':
+                                print 'red pill'
+                                connect_to_peer(args, pack)
                                 #PEER_LIST = pack[key]
+
+                        else:
+                            print pack
                         #this is probably temporary
-                        print PEER_LIST
+                        #print PEER_LIST
                         sys.stdout.write(data)
                         sys.stdout.flush()
                         sys.stdout.write('\n[ME] >'); sys.stdout.flush()
@@ -208,10 +243,11 @@ def chat_client(args):
             elif str(msg[:4]) == "send":
                 print("get send")
                 sending = msg.split()
+
+
                 for name in PEER_SOCKETS:
                     # print sending
                     # print sending[1]
-                    packet = json.dumps({"origin": [args.user, PEER_LIST[args.user]], "message": sending[2]})
                     #print packet
                     if sending[1] == name:
                         print("received send command")
@@ -220,7 +256,7 @@ def chat_client(args):
                 else:
                     print "need to connect to new peer"
                     connection_fuel = find_peer_from_server(args, sending[1])
-                    #connect_to_peer(name, PEER_LIST[name])
+                    format_peer_communication(sending)
                     #PEER_SOCKETS[name].send(packet)
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
                     # else:
