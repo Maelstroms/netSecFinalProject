@@ -35,7 +35,7 @@ USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
     parser.add_argument('-u', required=True, dest='user', help="User to be logged into server")
-    #parser.add_argument('-p', required=True, dest='userPass', help="User password for server authentication")
+    parser.add_argument('-p', required=True, dest='userPass', help="User password for server authentication")
     parser.add_argument('-sip', required=True, dest='server', help="IP address of the server")
     parser.add_argument('-sp', required=True, dest='port', type=int, help="port to connect to server")
     parser.add_argument('-pp', required=True, dest='send_port', type=int, help="port for listening socket, testing only")
@@ -61,7 +61,9 @@ def server_authentication(args):
         print 'Unable to connect'
         sys.exit()
 
-    packet = {args.user: PEER_LIST[args.user]}
+    packet = {args.user: {'IP ADDRESS' : PEER_LIST[args.user], 'password' : args.userPass}}
+
+        
     first_packet = json.dumps(packet)
     server_socket.send(first_packet)
     SOCKET_LIST.append(server_socket)

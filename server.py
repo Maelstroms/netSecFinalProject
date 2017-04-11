@@ -25,12 +25,9 @@ CLIENT_SOCKETS = {}
 CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
 #user list with passwords
 
-<<<<<<< HEAD
 
-=======
->>>>>>> 9d87d3fdba0a4b3b0ef2d11dd6150d74ed6c6c22
 USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
-            'Bob': {'awesome':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
+            'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
             'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784},
             'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784}}
 
@@ -100,6 +97,22 @@ def chat_server():
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 print newUser
                 user_name = newUser.keys()[0]
+                
+
+                passwd = newUser[user_name]['password']
+
+                print(passwd)
+                print(USER_LIST.keys()[0])
+
+
+                if(passwd == USER_LIST[user_name]['password']) :
+                    print("User is autheticated!!")
+
+                else :
+                     break
+
+
+
                 CLIENT_LIST[user_name] = newUser[user_name]
                 CLIENT_SOCKETS[user_name] = sockfd
                 #print "adress is " + str(addr.append(newUser))
