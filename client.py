@@ -63,11 +63,17 @@ def server_authentication(args):
 
     packet = {args.user: {'IP ADDRESS' : PEER_LIST[args.user], 'password' : args.userPass}}
 
-        
+
     first_packet = json.dumps(packet)
     server_socket.send(first_packet)
     SOCKET_LIST.append(server_socket)
     PEER_SOCKETS['server'] = server_socket
+    recv_tk = json.loads(server_socket.recv(RECV_BUFFER))
+    
+    tgt = recv_tk['TGT']
+    skey = recv_tk['sessionKey']
+    
+    
     print 'Connected to remote server. You can start sending messages'
 
 

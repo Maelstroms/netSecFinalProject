@@ -7,6 +7,7 @@ import select
 import argparse
 import json
 import random
+import time
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
@@ -67,6 +68,24 @@ def connect_user_to_peer(request):
     print packet
     CLIENT_SOCKETS[user].send(packet)
 
+# time.time() returns the time as a floating point number expressed in seconds since the epoch, in UTC.
+# create_new_tgt : Username --> TGT
+# GIVEN : Username
+# RETURNS : A newly created TGT which is a list of username, session key and time stamp
+
+def create_new_tgt (username) :
+    return [username,USER_LIST[username]['session_key'], time.time()]
+
+#check_expired_tgt : TGT -> TGT
+#GIVEN : TGT
+#RETURNS : Checks if the current TGT is expired or not, if expired then creates a new TGT else returns the same
+def check_expired_tgt (tgt) :
+    if (time.time() - tgt[2] > 3600) :
+        return create_new_tgt(tgt[0])
+    else :
+        return tgt
+
+
 
 def chat_server():
 
@@ -101,7 +120,7 @@ def chat_server():
 
                 passwd = newUser[user_name]['password']
 
-                print(passwd)
+                
                 print(USER_LIST.keys()[0])
 
 
@@ -111,6 +130,12 @@ def chat_server():
                 else :
                      break
 
+
+                keyandtgt = {'TGT':create_new_tgt(user_name),'sessionKey':USER_LIST[user_name]['session_key']}
+                sendkt = json.dumps(keyandtgt)
+                sockfd.send(sendkt)
+
+                
 
 
                 CLIENT_LIST[user_name] = newUser[user_name]
