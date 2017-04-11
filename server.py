@@ -1,25 +1,34 @@
 # server.py
-#python server.py -sp 9090
+#python server.py -sp 3000
 
 import sys
 import socket
 import select
 import argparse
 import json
+import random
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
     parser.add_argument('-sp', dest='port', required=True, type=int, help="port you want to use for server")
     return parser.parse_args(arglist)
 
+SERVER_MASTER_KEY = 0
 args = arguments(sys.argv[1:])
 HOST = ''
+#quick data structure to cycle through listening sockets
 SOCKET_LIST = []
-#Client list tracks online users
-CLIENT_LIST = {}
+#CLIENT_SOCKETS is a dictionary that allows easy recall of a client's socket
+CLIENT_SOCKETS = {}
+#Client list tracks online users and addresses to connect peers
+#CLIENT_LIST = {}
+CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
 #user list with passwords
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9d87d3fdba0a4b3b0ef2d11dd6150d74ed6c6c22
 USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
             'Bob': {'awesome':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
             'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784},
@@ -48,8 +57,19 @@ PORT = args.port
 #           plainText = decryptor.update(chunk)
 #     pass
 
-def connect_user_to_peer():
-    pass
+
+def connect_user_to_peer(request):
+    unpack = request['request']
+    user = unpack['tgt']
+    peer = unpack['name']
+    Na = unpack['nonce'] + 1
+    shared_secret= random.randint(0,65535)
+    peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
+    prep = {}
+    packet = json.dumps({'connection': {peer: CLIENT_LIST[peer], 'N+1': Na}})
+    print packet
+    CLIENT_SOCKETS[user].send(packet)
+
 
 def chat_server():
 
@@ -74,19 +94,23 @@ def chat_server():
             if sock == server_socket:
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
+                #add sockfd to the listening loop
                 SOCKET_LIST.append(sockfd)
                 #receive new user credentials
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
+                print newUser
                 user_name = newUser.keys()[0]
                 CLIENT_LIST[user_name] = newUser[user_name]
+                CLIENT_SOCKETS[user_name] = sockfd
                 #print "adress is " + str(addr.append(newUser))
                 print "Client (%s, %s) connected" % addr
                 print SOCKET_LIST
+                print CLIENT_SOCKETS
                 print CLIENT_LIST
                 brd = {"peer": CLIENT_LIST}
                 brd = json.dumps(brd)
                 print brd
-                broadcast(server_socket, sockfd, brd)
+
 
                     # newUser = sock.recv(RECV_BUFFER)
                     # CLIENT_LIST.append(newUser)
@@ -99,7 +123,12 @@ def chat_server():
                     # receiving data from the socket.
                     data = sock.recv(RECV_BUFFER)
                     if data:
-                        pass
+                        print 'data data'
+                        request = json.loads(data)
+                        print request
+                        #received request to connect to peer
+                        connect_user_to_peer(request)
+                        print 'should be dead'
                     else:
                         # remove the socket that's broken
                         if sock in SOCKET_LIST:
@@ -108,36 +137,19 @@ def chat_server():
 
 
                         # at this stage, no data means probably the connection has been broken
-                        #broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n" )
-
                 # exception
                 except Exception as inst:
+                    print "we lost our shit"
                     print(type(inst))    # the exception instance
                     print(inst.args)     # arguments stored in .args
                     print(inst)          # __str__ allows args to be printed directly,
                                          # but may be overridden in exception subclasses
-                    #broadcast(server_socket, sock, "Client (%s, %s)"% addr + CLIENT_LIST[SOCKET_LIST.index(sock) - 1] + " is offline\n")#this on defaults
+
                     break
 
     server_socket.close()
 
-# broadcast chat messages to all connected clients, here for development purposes
-def broadcast (server_socket, sock, message):
-    for socket in SOCKET_LIST:
-        # send the message only to peer
-        if socket != server_socket:
-            print("working?")
-            try :
-                print("yay")
-                socket.send(message)
-            except :
-                print("nay")
-                # broken socket connection
-                socket.close()
-                # broken socket, remove it
-                if socket in SOCKET_LIST:
-                    pass
-                    SOCKET_LIST.remove(socket)
+
 
 if __name__ == "__main__":
     sys.exit(chat_server())
