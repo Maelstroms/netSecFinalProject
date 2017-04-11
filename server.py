@@ -18,10 +18,10 @@ SOCKET_LIST = []
 #Client list tracks online users
 CLIENT_LIST = {}
 #user list with passwords
-USER_LIST = {'Alice':1,
-            'Bob':2,
-            'Carole':3,
-            'Eve':4}
+USER_LIST = {'Alice': Alice@114,
+            'Bob':Bob@224,
+            'Carole':Carol@334,
+            'Eve':Eve@444}
 RECV_BUFFER = 4096
 PORT = args.port
 
