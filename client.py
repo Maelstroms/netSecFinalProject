@@ -1,5 +1,7 @@
 # chat_client.py
-#python client.py -u Alice -sip 127.0.0.1 -sp 3000
+#python client.py -u Alice -p 1 -sip 127.0.0.1 -sp 3000
+#python client.py -u Alice -sip 127.0.0.1 -sp 3000 -pp 9091
+#python client.py -u Bob -sip 127.0.0.1 -sp 3000 -pp 9092
 
 import sys
 import socket
@@ -7,13 +9,28 @@ import select
 import argparse
 import json
 import random
+import threading
+import Queue
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
 
-PEER_LIST = {}
+backend = default_backend()
+
+
+
+
+TGT = {}
+PEER_LIST = {'Alice':('127.0.0.1', 9090),'Bob':('127.0.0.1', 9091)}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
 RECV_BUFFER = 4096
 HOST = ''
 PORT = random.randint(0,65535)
+#for testing P2P encryption
+USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
+'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
@@ -21,9 +38,12 @@ def arguments(arglist):
     #parser.add_argument('-p', required=True, dest='userPass', help="User password for server authentication")
     parser.add_argument('-sip', required=True, dest='server', help="IP address of the server")
     parser.add_argument('-sp', required=True, dest='port', type=int, help="port to connect to server")
+    #parser.add_argument('-pp', required=True, dest='port', type=int, help="port for listening socket, testing only")
     return parser.parse_args(arglist)
 
-
+def read_stdin(input_queue):
+    while True:
+        input_queue.put(sys.stdin.readline())
 
 def server_authentication(args):
     user = args.user
@@ -32,7 +52,6 @@ def server_authentication(args):
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.settimeout(2)
-    print 'hell'
 
     # connect to remote server
     try :
@@ -49,11 +68,22 @@ def server_authentication(args):
     print 'Connected to remote server. You can start sending messages'
 
 
+def find_peer_from_server(args, peer_name):
+    request = {'peer':'bob','tgt':args.user,'nonce':random.randint(0,65535)}
+    packet = json.dumps(request)
+    #encrypt()
+    PEER_SOCKETS['server'].send(packet)
+
+
 def connect_to_peer(name, addr):
+    print 'connecting to peer'
     print name
     print addr
     print addr[0]
     print addr[1]
+
+
+
     new_peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     new_peer_socket.settimeout(2)
 
@@ -69,7 +99,30 @@ def connect_to_peer(name, addr):
 
 
 
+# def encryption():
+#     # cipher key
+#     key = os.urandom(32)
+#     #CBC initiation vector
+#     iv = os.urandom(16)
+#     cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=backend)
+#     encryptor = cipher.encryptor()
+#     decryptor = cipher.decryptor()
+#     for chunk in iter(partial(inPlainfile.read, 1024), ''):
+#           cipherText = encryptor.update(chunk)
+#           outCipherfile.write(cipherText)
+#         ct = '' + encryptor.finalize()
+
+#     for chunk in iter(partial(inCipherfile.read, 1024), ''):
+#           if chunk == '':
+#             outPlainFile.write(decryptor.update(chunk) + decryptor.finalize())
+#             break
+#           plainText = decryptor.update(chunk)
+#     pass
+
+
 def chat_client(args):
+    #for testing REMEMBER TO REMOVE
+    PORT = args.port
     #PEER_LIST = {args.user: ('127.0.0.1', PORT)}
     global PEER_LIST
     PEER_LIST[args.user] = ('127.0.0.1', PORT)
@@ -79,13 +132,16 @@ def chat_client(args):
     receiving_socket.bind((HOST, PORT))
     receiving_socket.listen(10)
     SOCKET_LIST.append(receiving_socket)
-
+    input_queue = Queue.Queue()
 
     server_authentication(args)
 
 
 
     sys.stdout.write('[ME] >'); sys.stdout.flush()
+    input_thread = threading.Thread(target=read_stdin, args=(input_queue,))
+    input_thread.daemon = True
+    input_thread.start()
     while 1:
 
         # get the list sockets which are ready to be read through select
@@ -106,12 +162,13 @@ def chat_client(args):
                     # receiving data from the socket.
                     data = sock.recv(RECV_BUFFER)
                     if data:
+                        #make titles for data packets for sorting and use
                         sys.stdout.write("\n")
                         # this may need to change
                         pack = json.loads(data)
-                        for key in pack:
-                            if key == 'peer':
-                                PEER_LIST = pack[key]
+                        # for key in pack:
+                        #     if key == 'peer':
+                                #PEER_LIST = pack[key]
                         #this is probably temporary
                         print PEER_LIST
                         sys.stdout.write(data)
@@ -131,40 +188,45 @@ def chat_client(args):
                                          # but may be overridden in exception subclasses
 
 
-        msg = sys.stdin.readline()
-        if str(msg) == "list\n":
-            #received list command
-            print("received list command")
-            print PEER_LIST
-            sys.stdout.write('[ME] >'); sys.stdout.flush()
-        elif str(msg[:4]) == "send":
-            print("get send")
-            sending = msg.split()
-            for name in PEER_LIST:
-                print sending
-                print sending[1]
-                packet = json.dumps({"origin": [args.user, PEER_LIST[args.user]], "message": sending[2]})
-                print packet
-                if sending[1] == name:
-                    print("received send command")
-                    if name in PEER_SOCKETS:
-                        print "sending to existing peer"
-                        PEER_SOCKETS[name].send(packet)
-                        #PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+        #msg = sys.stdin.readline()
+
+        if not input_queue.empty():
+            msg = input_queue.get()
+            #print msg
+            if str(msg) == "list\n":
+                #received list command
+                print("received list command")
+                print PEER_LIST
+                sys.stdout.write('[ME] >'); sys.stdout.flush()
+            elif str(msg[:4]) == "send":
+                print("get send")
+                sending = msg.split()
+                for name in PEER_LIST:
+                    print sending
+                    print sending[1]
+                    packet = json.dumps({"origin": [args.user, PEER_LIST[args.user]], "message": sending[2]})
+                    print packet
+                    if sending[1] == name:
+                        print("received send command")
+                        if name in PEER_SOCKETS:
+                            print "sending to existing peer"
+                            PEER_SOCKETS[name].send(packet)
+                            #PEER_SOCKETS[name].send("\r" + '[FROM' + str(sock.getpeername()) + name + '] ' + " ".join(sending[2:])+"\n")
+                        else:
+                            print "need to connect to new peer"
+                            #find_peer_from_server('Bob')
+                            connect_to_peer(name, PEER_LIST[name])
+                            PEER_SOCKETS[name].send(packet)
+                        sys.stdout.write('[ME] >'); sys.stdout.flush()
                     else:
-                        print "need to connect to new peer"
-                        connect_to_peer(name, PEER_LIST[name])
-                        PEER_SOCKETS[name].send(packet)
-                    sys.stdout.write('[ME] >'); sys.stdout.flush()
-                else:
-                    print "error, no such user"
-                    sys.stdout.write('[ME] >'); sys.stdout.flush()
+                        print "error, no such user"
+                        sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
-        else:
-            print "did we hit?"
-            #print("Unrecognized command")
-            sys.stdout.write('[ME] >'); sys.stdout.flush()
+            else:
+                print "did we hit?"
+                #print("Unrecognized command")
+                sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 
 
