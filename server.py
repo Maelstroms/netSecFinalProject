@@ -19,12 +19,11 @@ SOCKET_LIST = []
 CLIENT_LIST = {}
 #user list with passwords
 
-USER_LIST = {'Alice':1,
-            'Bob':2,
-            'Carole':3,
-            'Eve':4}
+
 USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
-'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784}}
+            'Bob': {'awesome':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
+            'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784},
+            'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784}}
 
 RECV_BUFFER = 4096
 PORT = args.port
