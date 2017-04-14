@@ -55,12 +55,12 @@ def connect_user_to_peer(request):
     unpack = request['request']
     user = unpack['tgt']
     peer = unpack['name']
-    Na = unpack['nonce'] + 1
+    Na = unpack['Na'] + 1
     shared_secret= random.randint(0,65535)
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
     peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
-    prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'N+1': Na}
+    prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = json.dumps({'connection': prep})
     print packet
     CLIENT_SOCKETS[user].send(packet)
@@ -68,7 +68,7 @@ def connect_user_to_peer(request):
 def confirm_connection(request):
     packet = request['peer_confirmation']
     peer = packet['tgt']
-    confirmation = {'NS+1': packet['nonce']+1}
+    confirmation = {'Nb+1': packet['Nb']+1}
     CLIENT_SOCKETS[peer].send(json.dumps(confirmation))
 
 def chat_server():
