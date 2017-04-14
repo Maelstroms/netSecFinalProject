@@ -29,6 +29,8 @@ RECV_BUFFER = 4096
 HOST = ''
 PORT = random.randint(0,65535)
 MESSAGE_QUEUE = []
+Server_Nonce = 0
+Peer_Nonce = 0
 #for testing P2P encryption
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
@@ -71,33 +73,41 @@ def server_authentication(args):
 
 
 def find_peer_from_server(args, peer_name):
-    request = {'request': {'name':peer_name,'tgt':args.user,'nonce':random.randint(0,65535)}}
+    Server_Nonce = random.randint(0,65535)
+    request = {'request': {'name':peer_name,'tgt':args.user,'nonce':Server_Nonce}}
     packet = json.dumps(request)
     #encrypt()
     PEER_SOCKETS['server'].send(packet)
 
 def confirm_with_server(connection_message):
+    # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
     #{Ns+1 || TGT(bob) || Nb}Sb
     packet = {}
     for key in connection_message:
         packet[key] = connection_message[key]
     packet['Ns'] = packet['Ns']+1
-    packet['nonce'] = random.randint(0,65535)
+    Peer_Nonce = random.randint(0,65535)
+    packet['Nb'] = Peer_Nonce
+
     del packet['peer']
     del packet['Kab']
     ready = {'peer_confirmation': packet}
     PEER_SOCKETS['server'].send(json.dumps(ready))
 
+def accept_peer_connection():
+    pass
+
 def connect_to_peer(args, connection_packet):
+    # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
     pack = connection_packet['connection']
     print pack
     name = pack['peer'][0]
     addr =pack['peer'][1]
     print 'connecting to peer'
-    print name
-    print addr
-    print addr[0]
-    print addr[1]
+    # print name
+    # print addr
+    # print addr[0]
+    # print addr[1]
 
     new_peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     new_peer_socket.settimeout(2)
@@ -110,12 +120,14 @@ def connect_to_peer(args, connection_packet):
         sys.exit()
 
     pack['peer_packet']['peer'] = args.user
+    pack['peer_packet']['Na'] = random.randint(0,65535)
     new_peer_socket.send(json.dumps(pack['peer_packet']))
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
 
 def format_peer_communication(message):
-    packet = {'recipient':message[2], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
+
+    packet = {'recipient':message[1], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
     MESSAGE_QUEUE.append(packet)
 
 
@@ -185,8 +197,11 @@ def chat_client(args):
                 #verify new connection
                 sockfd, addr = receiving_socket.accept()
                 new_peer = json.loads(sockfd.recv(RECV_BUFFER))
+                print "connected to new peer"
                 print new_peer
                 confirm_with_server(new_peer)
+                sockfd.send(json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1}))
+                #this is accepting connections regardless at the moment
                 SOCKET_LIST.append(sockfd)
                 PEER_SOCKETS[new_peer['peer']] = sockfd
                 PEER_LIST[new_peer['peer']] = addr
@@ -205,13 +220,25 @@ def chat_client(args):
                         for key in pack:
                             if key == 'peer':
                                 print 'peers'
+                                print "final confirmation"
+                                print MESSAGE_QUEUE
+                                for x in MESSAGE_QUEUE:
+                                    if pack['peer'] == x['recipient']:
+                                        sock.send(json.dumps(x))
                             elif key == 'connection':
                                 print 'red pill'
+                                #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
+                                #initiator check first nonce
                                 connect_to_peer(args, pack)
+                            # elif key == 'Na+1':
+                            #     print "final confirmation"
+                                #initiator check second nonce
+
                                 #PEER_LIST = pack[key]
 
                         else:
-                            print pack
+                            print 'runoff'
+                            #print pack
                         #this is probably temporary
                         #print PEER_LIST
                         sys.stdout.write(data)
@@ -255,7 +282,7 @@ def chat_client(args):
                         PEER_SOCKETS[name].send(packet)
                 else:
                     print "need to connect to new peer"
-                    connection_fuel = find_peer_from_server(args, sending[1])
+                    find_peer_from_server(args, sending[1])
                     format_peer_communication(sending)
                     #PEER_SOCKETS[name].send(packet)
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
