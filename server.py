@@ -18,7 +18,7 @@ import pickle
 
 class Message :
     def __init__(self,msg,iv,tag):
-        
+
         self.msg = msg
         self.tag = tag
         self.iv = iv
@@ -59,38 +59,28 @@ PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
 PORT = args.port
 
-# def encryption():
-#     # cipher key
-#     key = os.urandom(32)
-#     #CBC initiation vector
-#     iv = os.urandom(16)
-#     cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=backend)
-#     encryptor = cipher.encryptor()
-#     decryptor = cipher.decryptor()
-#     for chunk in iter(partial(inPlainfile.read, 1024), ''):
-#           cipherText = encryptor.update(chunk)
-#           outCipherfile.write(cipherText)
-#         ct = '' + encryptor.finalize()
-
-#     for chunk in iter(partial(inCipherfile.read, 1024), ''):
-#           if chunk == '':
-#             outPlainFile.write(decryptor.update(chunk) + decryptor.finalize())
-#             break
-#           plainText = decryptor.update(chunk)
-#     pass
-
 
 def connect_user_to_peer(request):
     unpack = request['request']
     user = unpack['tgt']
     peer = unpack['name']
-    Na = unpack['nonce'] + 1
+    Na = unpack['Na'] + 1
     shared_secret= random.randint(0,65535)
+    #packet to be sent back to client
+    #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
     peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
-    prep = {}
-    packet = json.dumps({'connection': {peer: CLIENT_LIST[peer], 'N+1': Na}})
+    prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
+    packet = json.dumps({'connection': prep})
     print packet
     CLIENT_SOCKETS[user].send(packet)
+
+
+def confirm_connection(request):
+    packet = request['peer_confirmation']
+    peer = packet['tgt']
+    confirmation = {'Nb+1': packet['Nb']+1}
+    CLIENT_SOCKETS[peer].send(json.dumps(confirmation))
+
 
 # time.time() returns the time as a floating point number expressed in seconds since the epoch, in UTC.
 # create_new_tgt : Username --> TGT
@@ -105,13 +95,13 @@ def create_new_tgt (username) :
                     backend=default_backend()
                     ).encryptor()
 
-    
+
     cipherskey = encryptor.update(USER_LIST[username]['session_key']) + encryptor.finalize()
     tagskey = encryptor.tag
 
    # timetgt = time.time()
    # ciphertime = encryptor.update(timetgt) + encryptor.finalize()
-   # tagtime = encryptor.tag 
+   # tagtime = encryptor.tag
 
 
 
@@ -126,8 +116,6 @@ def check_expired_tgt (tgt) :
         return create_new_tgt(tgt[0])
     else :
         return tgt
-
-
 
 def chat_server():
 
@@ -157,7 +145,7 @@ def chat_server():
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 print newUser
                 user_name = newUser.keys()[0]
-                
+
                 if(USER_LIST.has_key(user_name)) :
                     print("User is autheticated!!")
 
@@ -176,7 +164,7 @@ def chat_server():
 
                 sockfd.send(str(puz_num))
 
-                
+
                 aes_packet =  sockfd.recv(RECV_BUFFER)
 
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
@@ -202,39 +190,39 @@ def chat_server():
                 #add sockfd to the listening loop
                 SOCKET_LIST.append(sockfd)
                 #receive new user credentials
-                
-                
+
+
                 encryptor = Cipher(
                     algorithms.AES(key),
                     modes.GCM(user_iv),
                     backend=default_backend()
                     ).encryptor()
 
-                
+
 
                 tgt,tagsserver = create_new_tgt(user_name)
 
                 usessionkey = USER_LIST[user_name]['session_key']
 
-                
-                
+
+
                 cipherskey = encryptor.update(usessionkey) + encryptor.finalize()
                 tagkey = encryptor.tag
 
 
                 tagkeyen = base64.b64encode(tagkey)
 
-                
+
                 sockfd.send(tagkeyen)
 
                 cipherkt = {'TGT' : tgt, 'session_key' : cipherskey}
 
                 cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
-                
-                
+
+
                 sockfd.send(cipherkt_packet_pickle)
-                
-                
+
+
 
 
                 CLIENT_LIST[user_name] = newUser[user_name]
@@ -264,7 +252,15 @@ def chat_server():
                         request = json.loads(data)
                         print request
                         #received request to connect to peer
-                        connect_user_to_peer(request)
+                        for key in request:
+                            if key == 'request':
+                                connect_user_to_peer(request)
+                            elif key == 'peer_confirmation':
+                                print request
+                                confirm_connection(request)
+
+
+                        #'peer_confirmation'
                         print 'should be dead'
                     else:
                         # remove the socket that's broken
