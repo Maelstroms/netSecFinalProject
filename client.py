@@ -128,22 +128,38 @@ def server_authentication(args):
 
     
     PEER_SOCKETS['server'] = server_socket
-    recv_tk_pickle = server_socket.recv(RECV_BUFFER)
-    recv_tag = pickle.loads(server_socket.recv(RECV_BUFFER))
+
+    
+    tagkey = base64.b64decode(server_socket.recv(RECV_BUFFER))
+
+    kt_packet = server_socket.recv(RECV_BUFFER)
+
+    pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
+    
 
     decryptor = Cipher(
                     algorithms.AES(MASTER_KEY),
-                    modes.GCM(MASTER_IV, recv_tag),
+                    modes.GCM(MASTER_IV, tagkey),
                     backend=default_backend()
                     ).decryptor()
 
-    recv_tk_plaintext = decryptor.update(recv_tk_pickle) + decryptor.finalize()
-
-    recv_tk = pickle.loads(recv_tk_plaintext)
+    tgt = pickle_tgt_key['TGT']
 
     
-    tgt = recv_tk['TGT']
-    skey = recv_tk['sessionKey']
+
+    decryptor = Cipher(
+                    algorithms.AES(MASTER_KEY),
+                    modes.GCM(MASTER_IV, tagkey),
+                    backend=default_backend()
+                    ).decryptor()
+
+    key_cipher = pickle_tgt_key['session_key']
+
+    recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
+
+    print 'TGT and session key received'
+    
+    
     
     
     print 'Connected to remote server. You can start sending messages'
