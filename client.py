@@ -11,10 +11,22 @@ import json
 import random
 import threading
 import Queue
+import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
+import base64
+import pickle
+
+class Message :
+    def __init__(self,msg,iv,tag):
+        
+        self.msg = msg
+        self.tag = tag
+        self.iv = iv
+
+
 
 backend = default_backend()
 
@@ -28,9 +40,27 @@ SOCKET_LIST =[]
 RECV_BUFFER = 4096
 HOST = ''
 PORT = random.randint(0,65535)
+
+MASTER_IV = os.urandom(12)
+MASTER_PASSWORD = 'awesome'
+
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"awesome")
+MASTER_HASH = digest.finalize()
+
+MASTER_KEY = MASTER_HASH
 #for testing P2P encryption
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
+
+def get_primes(n):
+    numbers = set(range(n, 1, -1))
+    primes = []
+    while numbers:
+        p = numbers.pop()
+        primes.append(p)
+        numbers.difference_update(set(range(p*2, n+1, p)))
+    return primes
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
@@ -61,14 +91,56 @@ def server_authentication(args):
         print 'Unable to connect'
         sys.exit()
 
-    packet = {args.user: {'IP ADDRESS' : PEER_LIST[args.user], 'password' : args.userPass}}
+    
+    packet = {args.user: {'IP ADDRESS' : PEER_LIST[args.user]}}
 
 
     first_packet = json.dumps(packet)
     server_socket.send(first_packet)
     SOCKET_LIST.append(server_socket)
+    
+
+    puz_num = int (server_socket.recv(RECV_BUFFER))
+
+
+    ans_puz = len (get_primes(puz_num))
+
+    
+
+    encryptor = Cipher(
+        algorithms.AES(MASTER_KEY),
+        modes.GCM(MASTER_IV),
+        backend=default_backend()
+    ).encryptor()
+
+
+    cipherpuzzle = encryptor.update(str(ans_puz)) + encryptor.finalize()
+    tag = encryptor.tag
+
+    
+
+    aes_packet = {'solution' : cipherpuzzle, 'iv' : MASTER_IV, 'tag' : tag}
+
+    aes_packet_pickle = pickle.dumps(aes_packet).encode('base64', 'strict')
+    
+    
+    server_socket.send(aes_packet_pickle)
+
+    
     PEER_SOCKETS['server'] = server_socket
-    recv_tk = json.loads(server_socket.recv(RECV_BUFFER))
+    recv_tk_pickle = server_socket.recv(RECV_BUFFER)
+    recv_tag = pickle.loads(server_socket.recv(RECV_BUFFER))
+
+    decryptor = Cipher(
+                    algorithms.AES(MASTER_KEY),
+                    modes.GCM(MASTER_IV, recv_tag),
+                    backend=default_backend()
+                    ).decryptor()
+
+    recv_tk_plaintext = decryptor.update(recv_tk_pickle) + decryptor.finalize()
+
+    recv_tk = pickle.loads(recv_tk_plaintext)
+
     
     tgt = recv_tk['TGT']
     skey = recv_tk['sessionKey']

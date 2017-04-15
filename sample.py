@@ -1,18 +1,8 @@
-import json
-dict = {'Name': 'Zara', 'Age': 7}
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"abc")
+digest.update(b"123")
+print digest.finalize()
 
 
-print dict
-packet = json.dumps(dict)
-packet2 = json.loads(packet)
-print packet
-print packet2
-
-if(packet2['Name'] == dict['Name']) :
-	print('true')
-else :
-	print('false')
-
-print packet2['Name']
-print dict['Name']
-print packet2.keys()

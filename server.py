@@ -8,6 +8,21 @@ import argparse
 import json
 import random
 import time
+import os
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+import base64
+import pickle
+
+class Message :
+    def __init__(self,msg,iv,tag):
+        
+        self.msg = msg
+        self.tag = tag
+        self.iv = iv
+
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
@@ -26,12 +41,17 @@ CLIENT_SOCKETS = {}
 CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
 #user list with passwords
 
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"awesome")
+key = digest.finalize()
 
-USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
+
+USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':os.urandom(32)},
             'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
             'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784},
             'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784}}
 
+PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
 PORT = args.port
 
@@ -110,30 +130,76 @@ def chat_server():
             if sock == server_socket:
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
-                #add sockfd to the listening loop
-                SOCKET_LIST.append(sockfd)
-                #receive new user credentials
+
+
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 print newUser
                 user_name = newUser.keys()[0]
                 
-
-                passwd = newUser[user_name]['password']
-
-                
-                print(USER_LIST.keys()[0])
-
-
-                if(passwd == USER_LIST[user_name]['password']) :
+                if(USER_LIST.has_key(user_name)) :
                     print("User is autheticated!!")
 
                 else :
-                     break
+                     break #TO BE FIXED
 
 
+
+
+                #get a random number for puzzle
+
+                puz_num = PUZZLE_ANSWERS.keys()[0]
+
+                print puz_num
+                print PUZZLE_ANSWERS[puz_num]
+
+                sockfd.send(str(puz_num))
+
+                
+                aes_packet =  sockfd.recv(RECV_BUFFER)
+
+                aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
+
+                crypt_answer = aes_packet_pickle['solution']
+
+                user_iv = aes_packet_pickle['iv']
+
+                user_tag = aes_packet_pickle['tag']
+
+                decryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(user_iv, user_tag),
+                    backend=default_backend()
+                    ).decryptor()
+
+                puz_answer =  int(decryptor.update(crypt_answer) + decryptor.finalize())
+
+                if(puz_answer != PUZZLE_ANSWERS[puz_num]) :
+                    print ("User is malicious")
+                    break ##TO BE FIXED
+
+                #add sockfd to the listening loop
+                SOCKET_LIST.append(sockfd)
+                #receive new user credentials
+                
                 keyandtgt = {'TGT':create_new_tgt(user_name),'sessionKey':USER_LIST[user_name]['session_key']}
-                sendkt = json.dumps(keyandtgt)
-                sockfd.send(sendkt)
+
+                kt_packet_pickle = pickle.dumps(keyandtgt)
+
+                encryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(user_iv),
+                    backend=default_backend()
+                    ).encryptor()
+
+                tagkt = pickle.dumps(encryptor.tag)
+
+                
+
+                cipherkt = encryptor.update(kt_packet_pickle) + encryptor.finalize()
+                
+                
+                sockfd.send(cipherkt)
+                sockfd.send(tagkt)
 
                 
 
