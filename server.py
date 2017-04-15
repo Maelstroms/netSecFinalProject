@@ -7,13 +7,32 @@ import select
 import argparse
 import json
 import random
+import time
+import os
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import hashes, serialization
+import base64
+import pickle
+
+class Message :
+    def __init__(self,msg,iv,tag):
+        
+        self.msg = msg
+        self.tag = tag
+        self.iv = iv
+
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
     parser.add_argument('-sp', dest='port', required=True, type=int, help="port you want to use for server")
     return parser.parse_args(arglist)
 
-SERVER_MASTER_KEY = 0
+SERVER_MASTER_KEY = os.urandom(32)
+SERVER_MASTER_IV = os.urandom(32)
+
+
 args = arguments(sys.argv[1:])
 HOST = ''
 #quick data structure to cycle through listening sockets
@@ -25,8 +44,18 @@ CLIENT_SOCKETS = {}
 CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
 #user list with passwords
 
-USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
-'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784}}
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"awesome")
+key = digest.finalize()
+
+alice_session_key = os.urandom(32)
+
+USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key': alice_session_key},
+            'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
+            'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784},
+            'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784}}
+
+PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
 PORT = args.port
 
@@ -63,6 +92,42 @@ def connect_user_to_peer(request):
     print packet
     CLIENT_SOCKETS[user].send(packet)
 
+# time.time() returns the time as a floating point number expressed in seconds since the epoch, in UTC.
+# create_new_tgt : Username --> TGT
+# GIVEN : Username
+# RETURNS : A newly created TGT which is a list of username, session key and time stamp
+
+def create_new_tgt (username) :
+
+    encryptor = Cipher(
+                    algorithms.AES(SERVER_MASTER_KEY),
+                    modes.GCM(SERVER_MASTER_IV),
+                    backend=default_backend()
+                    ).encryptor()
+
+    
+    cipherskey = encryptor.update(USER_LIST[username]['session_key']) + encryptor.finalize()
+    tagskey = encryptor.tag
+
+   # timetgt = time.time()
+   # ciphertime = encryptor.update(timetgt) + encryptor.finalize()
+   # tagtime = encryptor.tag 
+
+
+
+
+    return [username,cipherskey,time.time()], [tagskey]
+
+#check_expired_tgt : TGT -> TGT
+#GIVEN : TGT
+#RETURNS : Checks if the current TGT is expired or not, if expired then creates a new TGT else returns the same
+def check_expired_tgt (tgt) :
+    if (time.time() - tgt[2] > 3600) :
+        return create_new_tgt(tgt[0])
+    else :
+        return tgt
+
+
 
 def chat_server():
 
@@ -87,12 +152,91 @@ def chat_server():
             if sock == server_socket:
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
-                #add sockfd to the listening loop
-                SOCKET_LIST.append(sockfd)
-                #receive new user credentials
+
+
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 print newUser
                 user_name = newUser.keys()[0]
+                
+                if(USER_LIST.has_key(user_name)) :
+                    print("User is autheticated!!")
+
+                else :
+                     break #TO BE FIXED
+
+
+
+
+                #get a random number for puzzle
+
+                puz_num = PUZZLE_ANSWERS.keys()[0]
+
+                print puz_num
+                print PUZZLE_ANSWERS[puz_num]
+
+                sockfd.send(str(puz_num))
+
+                
+                aes_packet =  sockfd.recv(RECV_BUFFER)
+
+                aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
+
+                crypt_answer = aes_packet_pickle['solution']
+
+                user_iv = aes_packet_pickle['iv']
+
+                user_tag = aes_packet_pickle['tag']
+
+                decryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(user_iv, user_tag),
+                    backend=default_backend()
+                    ).decryptor()
+
+                puz_answer =  int(decryptor.update(crypt_answer) + decryptor.finalize())
+
+                if(puz_answer != PUZZLE_ANSWERS[puz_num]) :
+                    print ("User is malicious")
+                    break ##TO BE FIXED
+
+                #add sockfd to the listening loop
+                SOCKET_LIST.append(sockfd)
+                #receive new user credentials
+                
+                
+                encryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(user_iv),
+                    backend=default_backend()
+                    ).encryptor()
+
+                
+
+                tgt,tagsserver = create_new_tgt(user_name)
+
+                usessionkey = USER_LIST[user_name]['session_key']
+
+                
+                
+                cipherskey = encryptor.update(usessionkey) + encryptor.finalize()
+                tagkey = encryptor.tag
+
+
+                tagkeyen = base64.b64encode(tagkey)
+
+                
+                sockfd.send(tagkeyen)
+
+                cipherkt = {'TGT' : tgt, 'session_key' : cipherskey}
+
+                cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
+                
+                
+                sockfd.send(cipherkt_packet_pickle)
+                
+                
+
+
                 CLIENT_LIST[user_name] = newUser[user_name]
                 CLIENT_SOCKETS[user_name] = sockfd
                 #print "adress is " + str(addr.append(newUser))

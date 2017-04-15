@@ -11,10 +11,22 @@ import json
 import random
 import threading
 import Queue
+import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
+import base64
+import pickle
+
+class Message :
+    def __init__(self,msg,iv,tag):
+        
+        self.msg = msg
+        self.tag = tag
+        self.iv = iv
+
+
 
 backend = default_backend()
 
@@ -28,14 +40,32 @@ SOCKET_LIST =[]
 RECV_BUFFER = 4096
 HOST = ''
 PORT = random.randint(0,65535)
+
+MASTER_IV = os.urandom(12)
+MASTER_PASSWORD = 'awesome'
+
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"awesome")
+MASTER_HASH = digest.finalize()
+
+MASTER_KEY = MASTER_HASH
 #for testing P2P encryption
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
 
+def get_primes(n):
+    numbers = set(range(n, 1, -1))
+    primes = []
+    while numbers:
+        p = numbers.pop()
+        primes.append(p)
+        numbers.difference_update(set(range(p*2, n+1, p)))
+    return primes
+
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
     parser.add_argument('-u', required=True, dest='user', help="User to be logged into server")
-    #parser.add_argument('-p', required=True, dest='userPass', help="User password for server authentication")
+    parser.add_argument('-p', required=True, dest='userPass', help="User password for server authentication")
     parser.add_argument('-sip', required=True, dest='server', help="IP address of the server")
     parser.add_argument('-sp', required=True, dest='port', type=int, help="port to connect to server")
     parser.add_argument('-pp', required=True, dest='send_port', type=int, help="port for listening socket, testing only")
@@ -61,11 +91,77 @@ def server_authentication(args):
         print 'Unable to connect'
         sys.exit()
 
-    packet = {args.user: PEER_LIST[args.user]}
+    
+    packet = {args.user: {'IP ADDRESS' : PEER_LIST[args.user]}}
+
+
     first_packet = json.dumps(packet)
     server_socket.send(first_packet)
     SOCKET_LIST.append(server_socket)
+    
+
+    puz_num = int (server_socket.recv(RECV_BUFFER))
+
+
+    ans_puz = len (get_primes(puz_num))
+
+    
+
+    encryptor = Cipher(
+        algorithms.AES(MASTER_KEY),
+        modes.GCM(MASTER_IV),
+        backend=default_backend()
+    ).encryptor()
+
+
+    cipherpuzzle = encryptor.update(str(ans_puz)) + encryptor.finalize()
+    tag = encryptor.tag
+
+    
+
+    aes_packet = {'solution' : cipherpuzzle, 'iv' : MASTER_IV, 'tag' : tag}
+
+    aes_packet_pickle = pickle.dumps(aes_packet).encode('base64', 'strict')
+    
+    
+    server_socket.send(aes_packet_pickle)
+
+    
     PEER_SOCKETS['server'] = server_socket
+
+    
+    tagkey = base64.b64decode(server_socket.recv(RECV_BUFFER))
+
+    kt_packet = server_socket.recv(RECV_BUFFER)
+
+    pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
+    
+
+    decryptor = Cipher(
+                    algorithms.AES(MASTER_KEY),
+                    modes.GCM(MASTER_IV, tagkey),
+                    backend=default_backend()
+                    ).decryptor()
+
+    tgt = pickle_tgt_key['TGT']
+
+    
+
+    decryptor = Cipher(
+                    algorithms.AES(MASTER_KEY),
+                    modes.GCM(MASTER_IV, tagkey),
+                    backend=default_backend()
+                    ).decryptor()
+
+    key_cipher = pickle_tgt_key['session_key']
+
+    recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
+
+    print 'TGT and session key received'
+    
+    
+    
+    
     print 'Connected to remote server. You can start sending messages'
 
 
