@@ -49,11 +49,14 @@ digest.update(b"awesome")
 key = digest.finalize()
 
 alice_session_key = os.urandom(32)
+bob_session_key = os.urandom(32)
+carole_session_key = os.urandom(32)
+eve_session_key = os.urandom(32)
 
 USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key': alice_session_key},
-            'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
-            'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784},
-            'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': 54784}}
+            'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':bob_session_key},
+            'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': carole_session_key},
+            'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': eve_session_key}}
 
 PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
@@ -159,7 +162,7 @@ def chat_server():
                 user_name = newUser.keys()[0]
                 
                 if(USER_LIST.has_key(user_name)) :
-                    print("User is autheticated!!")
+                    print("User is a registered user!!")
 
                 else :
                      break #TO BE FIXED
