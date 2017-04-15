@@ -31,6 +31,10 @@ PORT = random.randint(0,65535)
 MESSAGE_QUEUE = []
 Server_Nonce = 0
 Peer_Nonce = 0
+P = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF
+EX = 0XFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF
+G =2
+
 #for testing P2P encryption
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
@@ -92,6 +96,7 @@ def confirm_with_server(connection_message):
 
     del packet['peer']
     del packet['Kab']
+    del packet['g^a mod p']
     ready = {'peer_confirmation': packet}
     PEER_SOCKETS['server'].send(json.dumps(ready))
 
@@ -125,6 +130,7 @@ def connect_to_peer(args, connection_packet):
     Peer_Nonce = random.randint(0,65535)
     pack['peer_packet']['peer'] = args.user
     pack['peer_packet']['Na'] = Peer_Nonce
+    pack['peer_packet']['g^a mod p'] = random.randint(EX,P)
     new_peer_socket.send(json.dumps(pack['peer_packet']))
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
@@ -205,8 +211,9 @@ def chat_client(args):
                 new_peer = json.loads(sockfd.recv(RECV_BUFFER))
                 print "connected to new peer"
                 print new_peer
+                #This needs to move into its own function to be easier to find
                 confirm_with_server(new_peer)
-                sockfd.send(json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1}))
+                sockfd.send(json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': random.randint(EX,P), 'Nb': random.randint(0,65535)}))
                 #this is accepting connections regardless at the moment
                 SOCKET_LIST.append(sockfd)
                 PEER_SOCKETS[new_peer['peer']] = sockfd
@@ -225,12 +232,14 @@ def chat_client(args):
                         pack = json.loads(data)
                         for key in pack:
                             if key == 'peer':
-                                #step 4, peer confirmed with server that we are legit
+                                #step 4, peer confirmed with server that we are legit, sending messages
                                 print "final confirmation"
                                 if pack['Na+1'] == Peer_Nonce+1:
                                     for x in MESSAGE_QUEUE:
                                         if pack['peer'] == x['recipient']:
+                                            x['Nb+1'] = pack['Nb']+1
                                             sock.send(json.dumps(x))
+                                            break
                                 else:
                                     print "bad nonce 2"
                                     print pack['Na+1']
