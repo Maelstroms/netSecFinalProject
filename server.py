@@ -30,26 +30,6 @@ USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1',
 RECV_BUFFER = 4096
 PORT = args.port
 
-# def encryption():
-#     # cipher key
-#     key = os.urandom(32)
-#     #CBC initiation vector
-#     iv = os.urandom(16)
-#     cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=backend)
-#     encryptor = cipher.encryptor()
-#     decryptor = cipher.decryptor()
-#     for chunk in iter(partial(inPlainfile.read, 1024), ''):
-#           cipherText = encryptor.update(chunk)
-#           outCipherfile.write(cipherText)
-#         ct = '' + encryptor.finalize()
-
-#     for chunk in iter(partial(inCipherfile.read, 1024), ''):
-#           if chunk == '':
-#             outPlainFile.write(decryptor.update(chunk) + decryptor.finalize())
-#             break
-#           plainText = decryptor.update(chunk)
-#     pass
-
 
 def connect_user_to_peer(request):
     unpack = request['request']

@@ -140,28 +140,6 @@ def format_peer_communication(message):
     packet = {'recipient':message[1], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
     MESSAGE_QUEUE.append(packet)
 
-
-# def encryption():
-#     # cipher key
-#     key = os.urandom(32)
-#     #CBC initiation vector
-#     iv = os.urandom(16)
-#     cipher = Cipher(algorithms.AES(key), modes.CTR(iv), backend=backend)
-#     encryptor = cipher.encryptor()
-#     decryptor = cipher.decryptor()
-#     for chunk in iter(partial(inPlainfile.read, 1024), ''):
-#           cipherText = encryptor.update(chunk)
-#           outCipherfile.write(cipherText)
-#         ct = '' + encryptor.finalize()
-
-#     for chunk in iter(partial(inCipherfile.read, 1024), ''):
-#           if chunk == '':
-#             outPlainFile.write(decryptor.update(chunk) + decryptor.finalize())
-#             break
-#           plainText = decryptor.update(chunk)
-#     pass
-
-
 def chat_client(args):
     #for testing REMEMBER TO REMOVE
     PORT = args.send_port
@@ -233,6 +211,7 @@ def chat_client(args):
                         for key in pack:
                             if key == 'peer':
                                 #step 4, peer confirmed with server that we are legit, sending messages
+
                                 print "final confirmation"
                                 if pack['Na+1'] == Peer_Nonce+1:
                                     for x in MESSAGE_QUEUE:
