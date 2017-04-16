@@ -208,7 +208,7 @@ def connect_to_peer(args, connection_packet):
     pack = connection_packet['connection']
     print pack
     name = pack['peer'][0]
-    addr =pack['peer'][1]
+    addr =pack['peer'][1]['ADDRESS']
     print 'connecting to peer'
     PEER_LIST[name] = addr
     # print name

@@ -7,20 +7,10 @@ from cryptography.hazmat.primitives.ciphers import (
 
 from cryptography.hazmat.primitives import hashes
 
-def encrypt():
+def encrypt(plaintext,key,iv):
     # Generate a random 96-bit IV.
 
-    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    digest.update(b"awesome")
     
-    key =  digest.finalize()
-    
-    iv = os.urandom(12)
-    f = open("f1.txt", 'rb')
-    output = open("f2.txt", 'wb')
-    decrypted = open("f3.txt",'wb')
-    plaintext = f.read()
-
     # Construct an AES-GCM Cipher object with the given key and a
     # randomly generated IV.
     encryptor = Cipher(
@@ -36,13 +26,13 @@ def encrypt():
     # Encrypt the plaintext and get the associated ciphertext.
     # GCM does not require padding.
     ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+    tag = encryptor.tag
+
+    return ciphertext, iv, tag, key
 
     
 
-    output.write(ciphertext)
-
-    tag = encryptor.tag
-
+    def decrypt(ciphertext, key,iv,tag)
     
     decryptor = Cipher(
          algorithms.AES(key),
@@ -50,21 +40,8 @@ def encrypt():
          backend=default_backend()
     ).decryptor()
 
-    text =  decryptor.update(ciphertext) + decryptor.finalize()
-    decrypted.write(text)
+    plaintext =  decryptor.update(ciphertext) + decryptor.finalize()
 
-    f.close()
-    output.close()
-    decrypted.close()
+    return plaintext
 
 
-
-def Main():
-    encrypt()
-        
-    
-  
-
-        
-if __name__ == "__main__":
-    Main()

@@ -16,12 +16,18 @@ from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import pickle
 
+
+
 class Message :
     def __init__(self,msg,iv,tag):
 
         self.msg = msg
         self.tag = tag
         self.iv = iv
+
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"awesome")
+key = digest.finalize()
 
 
 def arguments(arglist):
@@ -44,9 +50,7 @@ CLIENT_SOCKETS = {}
 CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
 #user list with passwords
 
-digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-digest.update(b"awesome")
-key = digest.finalize()
+
 
 alice_session_key = os.urandom(32)
 bob_session_key = os.urandom(32)
@@ -121,7 +125,7 @@ def check_expired_tgt (tgt) :
         return tgt
 
 def chat_server():
-
+    global key
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
