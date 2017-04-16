@@ -16,18 +16,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import pickle
 
-
-
 class Message :
     def __init__(self,msg,iv,tag):
 
         self.msg = msg
         self.tag = tag
         self.iv = iv
-
-digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-digest.update(b"awesome")
-key = digest.finalize()
 
 
 def arguments(arglist):
@@ -50,7 +44,9 @@ CLIENT_SOCKETS = {}
 CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
 #user list with passwords
 
-
+digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
+digest.update(b"awesome")
+key = digest.finalize()
 
 alice_session_key = os.urandom(32)
 bob_session_key = os.urandom(32)
@@ -66,6 +62,41 @@ PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
 PORT = args.port
 
+def encryptor(key,iv,plaintext):
+    
+    
+    # Construct an AES-GCM Cipher object with the given key and a
+    # randomly generated IV.
+    encryptor = Cipher(
+        algorithms.AES(key),
+        modes.GCM(iv),
+        backend=default_backend()
+    ).encryptor()
+
+    # associated_data will be authenticated but not encrypted,
+    # it must also be passed in on decryption.
+    
+
+    # Encrypt the plaintext and get the associated ciphertext.
+    # GCM does not require padding.
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+    
+    tag = encryptor.tag
+
+    return key,iv,ciphertext,tag
+
+    
+def decryptor(key,iv,tag,ciphertext)
+    
+    decryptor = Cipher(
+         algorithms.AES(key),
+         modes.GCM(iv, tag),
+         backend=default_backend()
+    ).decryptor()
+
+    plaintext =  decryptor.update(ciphertext) + decryptor.finalize()
+    
+    return plaintext,key,iv
 
 def connect_user_to_peer(request):
     unpack = request['request']
@@ -76,6 +107,7 @@ def connect_user_to_peer(request):
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
     peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
+    #encrypt this
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = json.dumps({'connection': prep})
     print packet
@@ -125,6 +157,7 @@ def check_expired_tgt (tgt) :
         return tgt
 
 def chat_server():
+
     global key
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
