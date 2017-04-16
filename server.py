@@ -11,7 +11,6 @@ import time
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import pickle
@@ -41,7 +40,7 @@ SOCKET_LIST = []
 CLIENT_SOCKETS = {}
 #Client list tracks online users and addresses to connect peers
 #CLIENT_LIST = {}
-CLIENT_LIST = {'Alice':('127.0.0.1', 9091),'Bob':('127.0.0.1', 9092)}
+CLIENT_LIST = {'Alice':{'ADDRESS': ['127.0.0.1', 9091]},'Bob':{'ADDRESS': ['127.0.0.1', 9092]}}
 #user list with passwords
 
 digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
@@ -62,6 +61,8 @@ PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
 PORT = args.port
 
+def check_puzzle():
+    pass
 
 def connect_user_to_peer(request):
     unpack = request['request']
@@ -92,13 +93,11 @@ def confirm_connection(request):
 # RETURNS : A newly created TGT which is a list of username, session key and time stamp
 
 def create_new_tgt (username) :
-
     encryptor = Cipher(
                     algorithms.AES(SERVER_MASTER_KEY),
                     modes.GCM(SERVER_MASTER_IV),
                     backend=default_backend()
                     ).encryptor()
-
 
     cipherskey = encryptor.update(USER_LIST[username]['session_key']) + encryptor.finalize()
     tagskey = encryptor.tag
@@ -106,10 +105,6 @@ def create_new_tgt (username) :
    # timetgt = time.time()
    # ciphertime = encryptor.update(timetgt) + encryptor.finalize()
    # tagtime = encryptor.tag
-
-
-
-
     return [username,cipherskey,time.time()], [tagskey]
 
 #check_expired_tgt : TGT -> TGT
@@ -145,8 +140,6 @@ def chat_server():
             if sock == server_socket:
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
-
-
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 print newUser
                 user_name = newUser.keys()[0]
@@ -157,9 +150,6 @@ def chat_server():
                 else :
                      break #TO BE FIXED
 
-
-
-
                 #get a random number for puzzle
 
                 puz_num = PUZZLE_ANSWERS.keys()[0]
@@ -167,18 +157,18 @@ def chat_server():
                 print puz_num
                 print PUZZLE_ANSWERS[puz_num]
 
-                sockfd.send(str(puz_num))
-
+                sockfd.send(json.dumps({'puzz':puz_num}))
+####################################################################################
 
                 aes_packet =  sockfd.recv(RECV_BUFFER)
-
+                print 'aes packet'
+                print aes_packet
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
-
                 crypt_answer = aes_packet_pickle['solution']
-
                 user_iv = aes_packet_pickle['iv']
-
                 user_tag = aes_packet_pickle['tag']
+
+
 
                 decryptor = Cipher(
                     algorithms.AES(key),
@@ -206,29 +196,19 @@ def chat_server():
 
 
                 tgt,tagsserver = create_new_tgt(user_name)
-
                 usessionkey = USER_LIST[user_name]['session_key']
-
-
 
                 cipherskey = encryptor.update(usessionkey) + encryptor.finalize()
                 tagkey = encryptor.tag
-
-
                 tagkeyen = base64.b64encode(tagkey)
 
 
                 sockfd.send(tagkeyen)
 
                 cipherkt = {'TGT' : tgt, 'session_key' : cipherskey}
-
                 cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
 
-
                 sockfd.send(cipherkt_packet_pickle)
-
-
-
 
                 CLIENT_LIST[user_name] = newUser[user_name]
                 CLIENT_SOCKETS[user_name] = sockfd
@@ -258,7 +238,9 @@ def chat_server():
                         print request
                         #received request to connect to peer
                         for key in request:
-                            if key == 'request':
+                            if key == 'placeholderbecauseImtoolazytorewriteanything':
+                                print 'im surprised'
+                            elif key == 'request':
                                 connect_user_to_peer(request)
                             elif key == 'peer_confirmation':
                                 print request
@@ -266,7 +248,7 @@ def chat_server():
 
 
                         #'peer_confirmation'
-                        print 'should be dead'
+                        #print 'should be dead'
                     else:
                         # remove the socket that's broken
                         if sock in SOCKET_LIST:
