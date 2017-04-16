@@ -29,6 +29,7 @@ TGT = {}
 #final form of Peer entries:
 #'Alice':{'ADDRESS': ['127.0.0.1', 9091]}
 #PEER_LIST = {}
+
 PEER_LIST = {'Alice':{'ADDRESS': ['127.0.0.1', 9091]},'Bob':{'ADDRESS': ['127.0.0.1', 9092]}}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
@@ -54,6 +55,43 @@ MASTER_KEY = MASTER_HASH
 #for testing P2P encryption
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
+
+
+def encryptor(key,iv,plaintext):
+
+
+    # Construct an AES-GCM Cipher object with the given key and a
+    # randomly generated IV.
+    encryptor = Cipher(
+        algorithms.AES(key),
+        modes.GCM(iv),
+        backend=default_backend()
+    ).encryptor()
+
+    # associated_data will be authenticated but not encrypted,
+    # it must also be passed in on decryption.
+
+
+    # Encrypt the plaintext and get the associated ciphertext.
+    # GCM does not require padding.
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+
+    tag = encryptor.tag
+
+    return ciphertext,tag
+
+
+def decryptor(key,iv,tag,ciphertext)
+
+    decryptor = Cipher(
+         algorithms.AES(key),
+         modes.GCM(iv, tag),
+         backend=default_backend()
+    ).decryptor()
+
+    plaintext =  decryptor.update(ciphertext) + decryptor.finalize()
+
+    return plaintext
 
 
 def get_primes(n):
