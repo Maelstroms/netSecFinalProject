@@ -1,7 +1,11 @@
 # chat_client.py
-#python client.py -u Alice -p 1 -sip 127.0.0.1 -sp 3000
+#python client.py -u Alice -p awesome -sip 127.0.0.1 -sp 3000
+
 #python client.py -u Alice -sip 127.0.0.1 -sp 3000 -pp 9091
 #python client.py -u Bob -sip 127.0.0.1 -sp 3000 -pp 9092
+
+#python client.py -u Alice -p awesome -sip 127.0.0.1 -sp 3000 -pp 9091
+#python client.py -u Bob -p awesome -sip 127.0.0.1 -sp 3000 -pp 9092
 
 
 import sys
@@ -48,8 +52,6 @@ Peer_Nonce = 0
 P = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF
 EX = 0XFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF
 G =2
-
-
 
 MASTER_IV = os.urandom(12)
 MASTER_PASSWORD = 'awesome'
@@ -103,7 +105,7 @@ def server_authentication(args):
         sys.exit()
 
 
-    packet = {args.user: {'IP ADDRESS' : PEER_LIST[args.user]}}
+    packet = {args.user: {'ADDRESS' : PEER_LIST[args.user]}}
 
 
     first_packet = json.dumps(packet)
@@ -169,12 +171,31 @@ def server_authentication(args):
     recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
 
     print 'TGT and session key received'
-
-
-
-
     print 'Connected to remote server. You can start sending messages'
 
+
+
+
+def list_command():
+    print("received list command")
+    print PEER_LIST
+
+def send_command(msg):
+    sending = msg.split()
+    for name in PEER_SOCKETS:
+        if sending[1] == name:
+            print "sending to existing peer"
+            PEER_SOCKETS[name].send(json.dumps({'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}}))
+    else:
+        print "need to connect to new peer"
+        #step 1 in confirming a new peer
+        find_peer_from_server(args, sending[1])
+        format_peer_communication(sending)
+
+def format_peer_communication(message):
+
+    packet = {'recipient':message[1], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
+    MESSAGE_QUEUE.append(packet)
 
 def find_peer_from_server(args, peer_name):
     global Server_Nonce
@@ -200,8 +221,14 @@ def confirm_with_server(connection_message):
     ready = {'peer_confirmation': packet}
     PEER_SOCKETS['server'].send(json.dumps(ready))
 
-def accept_peer_connection():
-    pass
+
+def accept_peer_connection(pack):
+    for x in MESSAGE_QUEUE:
+        if pack['peer'] == x['recipient']:
+            x['Nb+1'] = pack['Nb']+1
+            sock.send(json.dumps(x))
+            break
+
 
 def connect_to_peer(args, connection_packet):
     global Peer_Nonce
@@ -209,8 +236,9 @@ def connect_to_peer(args, connection_packet):
     pack = connection_packet['connection']
     print pack
     name = pack['peer'][0]
-    addr =pack['peer'][1]
+    addr =pack['peer'][1]['ADDRESS']
     print 'connecting to peer'
+
     PEER_LIST[name] = addr
     # print name
     # print addr
@@ -225,7 +253,7 @@ def connect_to_peer(args, connection_packet):
         new_peer_socket.connect((addr[0], addr[1]))
     except :
         print 'Unable to connect'
-        sys.exit()
+        #sys.exit()
 
     Peer_Nonce = random.randint(0,65535)
     pack['peer_packet']['peer'] = args.user
@@ -235,10 +263,9 @@ def connect_to_peer(args, connection_packet):
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
 
-def format_peer_communication(message):
 
-    packet = {'recipient':message[1], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
-    MESSAGE_QUEUE.append(packet)
+
+
 
 def chat_client(args):
     #for testing REMEMBER TO REMOVE
@@ -267,7 +294,7 @@ def chat_client(args):
 
     #threading so that user input is non blocking
     #terrifying, here there be dragons
-    #unless you know what you're doing, don't fuck with this
+    #unless you know what you're doing, don't f*** with this
     input_queue = Queue.Queue()
     input_thread = threading.Thread(target=read_stdin, args=(input_queue,))
     input_thread.daemon = True
@@ -293,6 +320,7 @@ def chat_client(args):
                 confirm_with_server(new_peer)
                 sockfd.send(json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': random.randint(EX,P), 'Nb': random.randint(0,65535)}))
                 #this is accepting connections regardless at the moment
+
                 SOCKET_LIST.append(sockfd)
                 PEER_SOCKETS[new_peer['peer']] = sockfd
                 PEER_LIST[new_peer['peer']] = addr
@@ -309,20 +337,8 @@ def chat_client(args):
                         # this may need to change
                         pack = json.loads(data)
                         for key in pack:
-                            if key == 'peer':
-                                #step 4, peer confirmed with server that we are legit, sending messages
-
-                                print "final confirmation"
-                                if pack['Na+1'] == Peer_Nonce+1:
-                                    for x in MESSAGE_QUEUE:
-                                        if pack['peer'] == x['recipient']:
-                                            x['Nb+1'] = pack['Nb']+1
-                                            sock.send(json.dumps(x))
-                                            break
-                                else:
-                                    print "bad nonce 2"
-                                    print pack['Na+1']
-                                    print Peer_Nonce
+                            if key == 'placeholderbecauseImtoolazytorewriteanything':
+                                print 'im surprised'
                             elif key == 'connection':
                                 print 'red pill'
                                 # step 2 in peer connection
@@ -332,6 +348,15 @@ def chat_client(args):
                                     connect_to_peer(args, pack)
                                 else:
                                     print "bad nonce"
+                            elif key == 'peer':
+                                #step 4, peer confirmed with server that we are legit, sending messages
+                                print "final confirmation"
+                                if pack['Na+1'] == Peer_Nonce+1:
+                                    accept_peer_connection(pack)
+                                else:
+                                    print "bad nonce 2"
+                                    print pack['Na+1']
+                                    print Peer_Nonce
 
                         else:
                             print 'runoff'
@@ -361,34 +386,14 @@ def chat_client(args):
             #print msg
             if str(msg) == "list\n":
                 #received list command
-                print("received list command")
-                print PEER_LIST
+                list_command()
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
             elif str(msg[:4]) == "send":
-                print("get send")
-                sending = msg.split()
-
-
-                for name in PEER_SOCKETS:
-                    # print sending
-                    # print sending[1]
-                    #print packet
-                    if sending[1] == name:
-                        print("received send command")
-                        print "sending to existing peer"
-                        PEER_SOCKETS[name].send(json.dumps({'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}}))
-                else:
-                    print "need to connect to new peer"
-                    #step 1 in confirming a new peer
-                    find_peer_from_server(args, sending[1])
-                    format_peer_communication(sending)
-                    #PEER_SOCKETS[name].send(packet)
+                print("got send command")
+                send_command(msg)
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
-                    # else:
-                    #     print "error, no such user"
-                    #     sys.stdout.write('[ME] >'); sys.stdout.flush()
-
-
+            elif str(msg[:6]) == "logout":
+                print 'done'
             else:
                 print "did we hit?"
                 #print("Unrecognized command")

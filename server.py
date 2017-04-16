@@ -72,6 +72,7 @@ def connect_user_to_peer(request):
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
     peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
+    #encrypt this
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = json.dumps({'connection': prep})
     print packet
@@ -122,6 +123,7 @@ def check_expired_tgt (tgt) :
 
 def chat_server():
 
+    global key
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_socket.bind((HOST, PORT))
