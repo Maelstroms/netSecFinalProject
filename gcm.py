@@ -10,10 +10,9 @@ from cryptography.hazmat.primitives import hashes
 def encrypt():
     # Generate a random 96-bit IV.
 
-    digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
-    digest.update(b"awesome")
     
-    key =  digest.finalize()
+    
+    key =  os.urandom(256)
     
     iv = os.urandom(12)
     f = open("f1.txt", 'rb')
