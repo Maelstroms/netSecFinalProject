@@ -117,7 +117,7 @@ def connect_user_to_peer(request):
     TGT = unpack['TGT']
     peer = unpack['name']
     Na = unpack['Na'] + 1
-    shared_secret= random.randint(0,65535)
+    shared_secret= os.urandom(32)
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
     peer_encryption = json.dumps({'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer})
