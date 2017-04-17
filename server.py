@@ -99,8 +99,22 @@ def connect_user_to_peer(request):
     print 'Sending address'
     # print request
     unpack = request['request']
+    print unpack
 
-    user = unpack['tgt']
+    key = USER_LIST[unpack['from']]['session_key']
+    iv = unpack['IV']
+    tag = unpack['TAG']
+
+    decryptor = Cipher(
+         algorithms.AES(key),
+         modes.GCM(iv, tag),
+         backend=default_backend()
+    ).decryptor()
+
+    print 'made decryptor'
+    unpack = json.loads(decryptor.update(unpack['cipher']) + decryptor.finalize())
+
+    TGT = unpack['TGT']
     peer = unpack['name']
     Na = unpack['Na'] + 1
     shared_secret= random.randint(0,65535)
@@ -110,7 +124,7 @@ def connect_user_to_peer(request):
     #encrypt this
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = pickle.dumps({'connection': prep}).encode('base64', 'strict')
-    CLIENT_SOCKETS[user].send(packet)
+    CLIENT_SOCKETS[peer].send(packet)
     print "all cool"
 
 

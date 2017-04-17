@@ -193,7 +193,8 @@ def receive_session_key(args, data):
     decrypted_packet = json.loads(decryptor.update(kt_packet) + decryptor.finalize())
     print decrypted_packet
     #add nonce check
-    PEER_LIST['server']['session_key'] = decrypted_packet['session_key']
+    #Stupid dangerous use of eval
+    PEER_LIST['server']['session_key'] = eval(decrypted_packet['session_key'])
     PEER_LIST[args.user]['TGT'] = decrypted_packet['TGT']
 
 
@@ -214,7 +215,7 @@ def send_command(msg):
         if sending[1] == name:
             print "sending to existing peer"
             key = PEER_LIST[name][encryption_key]
-            iv = os.urandom(32)
+            iv = os.urandom(12)
             # encryptor = Cipher(
     #                 algorithms.AES(key),
     #                 modes.GCM(user_iv),
@@ -239,8 +240,19 @@ def find_peer_from_server(args, peer_name):
     print "get address from server"
     global Server_Nonce
     Server_Nonce = random.randint(0,65535)
-    encrypted_section = {'name':peer_name,'tgt':args.user,'Na':Server_Nonce}
-    request = {'request': encrypted_section}
+    encrypted_section = {'name':peer_name,'TGT':PEER_LIST[args.user]['TGT'],'Na':Server_Nonce}
+    key = PEER_LIST['server']['session_key']
+    print key
+    iv = os.urandom(12)
+    encryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(iv),
+                    backend=default_backend()
+                    ).encryptor()
+    cipherkt = encryptor.update(json.dumps(encrypted_section)) + encryptor.finalize()
+    tagkey = encryptor.tag
+
+    request = {'request': {'cipher':cipherkt, 'IV':iv, 'TAG':tagkey, 'from':args.user}}
     packet = pickle.dumps(request).encode('base64', 'strict')
     PEER_SOCKETS['server'].send(packet)
 
@@ -315,7 +327,7 @@ def accept_peer_connection(pack, sock):
             x['Nb+1'] = pack['Nb']+1
             encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
             key = PEER_LIST[name][encryption_key]
-            iv = os.urandom(32)
+            iv = os.urandom(12)
         #   encryptor = Cipher(
         #                 algorithms.AES(key),
         #                 modes.GCM(user_iv),
