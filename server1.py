@@ -44,13 +44,13 @@ bob_session_key = os.urandom(32)
 carole_session_key = os.urandom(32)
 eve_session_key = os.urandom(32)
 
-USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key': alice_session_key},
-            'Bob': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1','session_key':bob_session_key},
-            'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': carole_session_key},
-            'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': eve_session_key}}
+USER_LIST ={'Alice': {'password':'awesome','master_key': key,'IPaddr':'127.0.0.1','session_key': alice_session_key},
+            'Bob': {'password':'awesome','master_key': key,'IPaddr':'127.0.0.1','session_key':bob_session_key},
+            'Carole': {'password': 'awesome', 'master_key': key, 'IPaddr': '127.0.0.1', 'session_key': carole_session_key},
+            'Eve': {'password': 'awesome', 'master_key': key, 'IPaddr': '127.0.0.1', 'session_key': eve_session_key}}
 
 PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
-RECV_BUFFER = 4096
+RECV_BUFFER = 8192
 PORT = args.port
 
 def encryptor(key,iv,plaintext):
@@ -96,19 +96,67 @@ def check_puzzle():
     pass
 
 def connect_user_to_peer(request):
-    unpack = request['request']
-    user = unpack['tgt']
+    unpack_request = request['request']
+    cipher_pack = unpack_request['packet']
+    source_name = unpack_request['from']
+    source_iv = unpack_request['iv']
+    source_tag = unpack_request['tag']
+    source_key = USER_LIST[source_name]['session_key']
+
+    decryptor = Cipher(
+         algorithms.AES(source_key),
+         modes.GCM(source_iv, source_tag),
+         backend=default_backend()
+    ).decryptor()
+
+    json_dict =  decryptor.update(cipher_pack) + decryptor.finalize()
+    dict_pack = json.loads(json_dict)
+
+    dest_name = dict_pack['name']
+    source_tgt = dict_pack['tgt']
+    source_na = dict_pack['Na']
+
+
     peer = unpack['name']
-    Na = unpack['Na'] + 1
-    shared_secret= random.randint(0,65535)
+    Na = source_na + 1
+    shared_secret_key= random.randint(0,65535)
+    dest_tgt = CLIENT_LIST[dest_name]['TGT']
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
-    peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
+    peer_encryption_dict = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': dest_tgt}
+    peer_encryption_packet = json.dumps(peer_encryption_dict)
+    peer_iv = os.urandom(12)
+    peer_master_key = USER_LIST[dest_name]['master_key']
+
+    encryptor = Cipher(
+                    algorithms.AES(peer_master_key),
+                    modes.GCM(peer_iv),
+                    backend=default_backend()
+                    ).encryptor()
+
+    secret_peer_packet = encryptor.update(peer_encryption_packet) + encryptor.finalize()
+    peer_tag = encryptor.tag
+
     #encrypt this
-    prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
-    packet = json.dumps({'connection': prep})
-    print packet
-    CLIENT_SOCKETS[user].send(packet)
+    prep = {'secret': shared_secret_key,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': secret_peer_packet, 'Na+1': Na}
+    packet = json.dumps(prep)
+
+    iv_source = os.urandom(12)
+
+    encryptor = Cipher(
+                    algorithms.AES(source_key),
+                    modes.GCM(iv_source),
+                    backend=default_backend()
+                    ).encryptor()
+
+    source_packet_encrypted = encryptor.update(packet) + encryptor.finalize()
+    source_tag = encryptor.tag
+
+    final_packet = {'connection' : {'cipher' : source_packet_encrypted, 'source_iv' : iv_source, 'source_tag' : source_tag, 'peer_iv' : peer_iv, "peer_tag" : peer_tag}}
+    traveler = pickle.dumps(final_packet)
+    traveler = traveler.encode('base64', 'strict')
+    
+    CLIENT_SOCKETS[user].send(traveler)
 
 
 def confirm_connection(request):
@@ -132,7 +180,7 @@ def create_new_tgt (username) :
 
     proto_session= USER_LIST[username]['session_key']
     proto_tgt = [username,repr(proto_session),time.time()]
-    string_tgt = json.dumps(proto_tgt, ensure_ascii=False)
+    string_tgt = json.dumps(proto_tgt)
     cipher_TGT = encryptor.update(repr(string_tgt))+ encryptor.finalize()
     tgt_encryption_tag = encryptor.tag
 
@@ -192,12 +240,11 @@ def chat_server():
                 print puz_num
                 print PUZZLE_ANSWERS[puz_num]
 
-                sockfd.send(json.dumps({'puzz':puz_num}))
+                sockfd.send(pickle.dumps({'puzz':puz_num}).encode('base64', 'strict'))
 ####################################################################################
 
                 aes_packet =  sockfd.recv(RECV_BUFFER)
-                print 'aes packet'
-                print aes_packet
+                
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
                 crypt_answer = aes_packet_pickle['solution']
                 user_iv = aes_packet_pickle['iv']
@@ -211,12 +258,10 @@ def chat_server():
                     backend=default_backend()
                     ).decryptor()
 
-                print 'encrypted packet'
-                print crypt_answer
+                
                 decrypted_puzz_packet = decryptor.update(crypt_answer) + decryptor.finalize()
                 decrypted_puzz_packet = json.loads(decrypted_puzz_packet    )
-                print 'decripted_puzz_pack'
-                print decrypted_puzz_packet
+               
                 puz_answer = decrypted_puzz_packet['puzzle']
 
                 if(puz_answer != PUZZLE_ANSWERS[puz_num]) :
@@ -240,22 +285,22 @@ def chat_server():
                 usersionkey = USER_LIST[user_name]['session_key']
 
                 #cipherskey = encryptor.update(usersionkey) + encryptor.finalize()
-
-
-
-
-
-
                 cipherkt = {'TGT' : repr(tgt), 'session_key' : repr(usersionkey), 'Na+1': decrypted_puzz_packet['Na']+1}
-                cipherkt = encryptor.update(json.dumps(cipherkt, ensure_ascii=False)) + encryptor.finalize()
-                #cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
+                cipherkt = encryptor.update(json.dumps(cipherkt)) + encryptor.finalize()
+                cipherkt_packet_pickle = cipherkt
 
                 tagkey = encryptor.tag
-                tagkeyen = base64.b64encode(tagkey)
-                accept_user_packet = {'accepted': {'acceptance':repr(cipherkt), 'tag':tagkeyen}}
-                sockfd.send(json.dumps(accept_user_packet, ensure_ascii=False))
+                #tagkeyen = base64.b64encode(tagkey)
+                accept_user_packet = {'accepted': {'acceptance':cipherkt_packet_pickle, 'tag':tagkey, 'IV':user_iv}}
+                
+                traveler = pickle.dumps(accept_user_packet)
+                traveler = traveler.encode('base64', 'strict')
+                
+                sockfd.send(traveler)
 
                 CLIENT_LIST[user_name] = newUser[user_name]
+                
+                #CLIENT_LIST[user_name]['session_key'] = usersionkey
                 CLIENT_SOCKETS[user_name] = sockfd
                 #print "adress is " + str(addr.append(newUser))
                 print "Client (%s, %s) connected" % addr
@@ -273,13 +318,13 @@ def chat_server():
                     data = sock.recv(RECV_BUFFER)
                     if data:
                         print 'data data'
-                        request = json.loads(data)
-                        print request
+                        request = pickle.loads(data.decode('base64', 'strict'))
+                        
                         #received request to connect to peer
                         for key in request:
                             if key == 'placeholderbecauseImtoolazytorewriteanything':
                                 print 'im surprised'
-                            elif key == 'request_packet':
+                            elif key == 'request':
                                 connect_user_to_peer(request)
                             elif key == 'peer_confirmation':
                                 print request

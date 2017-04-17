@@ -31,7 +31,7 @@ TGT = {}
 PEER_LIST = {}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
-RECV_BUFFER = 4096
+RECV_BUFFER = 8192
 HOST = ''
 PORT = random.randint(0,65535)
 
@@ -159,7 +159,7 @@ def solve_puzzle(args, pack):
 
     Na = random.randint(0,65535)
     puzz_ans_packet = {'puzzle': ans_puz, 'Na': Na}
-    packet_prep = json.dumps(puzz_ans_packet, ensure_ascii=False)
+    packet_prep = json.dumps(puzz_ans_packet)
 
     cipherpuzzle = encryptor.update(packet_prep) + encryptor.finalize()
     tag = encryptor.tag
@@ -174,11 +174,18 @@ def solve_puzzle(args, pack):
 
 
 
-def receive_session_key(data):
-    print data
+def receive_session_key(args,data):
+    #print data
+    
     server_socket = PEER_SOCKETS['server']
+    # SUPER DANGEROUS, SANITIZE BEFORE TURNING IN
     tagkey = data['tag']
+
+    
     kt_packet = data['acceptance']
+    # SUPER DANGEROUS, SANITIZE BEFORE TURNING IN
+    iv = data['IV']
+    
     #pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
 
     #user tgt
@@ -192,15 +199,18 @@ def receive_session_key(data):
 
     decryptor = Cipher(
                     algorithms.AES(MASTER_KEY),
-                    modes.GCM(MASTER_IV, tagkey),
+                    modes.GCM(iv, tagkey),
                     backend=default_backend()
                     ).decryptor()
-
-    key_cipher = pickle_tgt_key['session_key']
+    
+    decrypted_packet = decryptor.update(kt_packet) + decryptor.finalize()
+    
+    #key_cipher = pickle_tgt_key['session_key']
 
     #server_session_key
-    recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
-    PEER_LIST['server']['session_key'] = recv_key_plaintext
+    #recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
+    PEER_LIST['server']['session_key'] = decrypted_packet['session_key']
+    PEER_LIST[args.user]['TGT'] = decrypted_packet['session_key']
 
 
     print 'TGT and session key received'
@@ -231,26 +241,32 @@ def format_peer_communication(message):
     MESSAGE_QUEUE.append(packet)
 
 
-def find_peer_from_server(args, peer_name):  ## {BOB || TGT(alice) || Na}Sa
+def find_peer_from_server(args, peer_name):
     global Server_Nonce
     Server_Nonce = random.randint(0,65535)
+    source_username  = args.user
+    source_tgt = PEER_LIST[source_username]['TGT']
+    source_encryption_key = PEER_LIST[source_username]['encryption_key']
+    destination_name = peer_name
+    request_packet = {'name':destination_name,'tgt':source_tgt,'Na':Server_Nonce}
+    packet = json.dumps(request)
+    source_iv = os.urandom(12)
 
     encryptor = Cipher(
-                    algorithms.AES(key),
-                    modes.GCM(iv),
+                    algorithms.AES(source_encryption_key),
+                    modes.GCM(source_iv),
                     backend=default_backend()
                     ).encryptor()
 
-    request = {'request': {'name':peer_name,'tgt': repr(args.user),'Na': Server_Nonce}}
-    cipherkt = encryptor.update(json.dumps(request)) + encryptor.finalize()
-    
-    tag_request = encryptor.tag
-    tag_request_en = base64.b64encode(tag_request)
+    cipherp = encryptor.update(json.dumps(request_packet)) + encryptor.finalize()
+    tag = encryptor.tag
 
-    client_server_packet = {'request_packet' : repr(cipherkt),'request_tag' : tag_request_en.'iv' : iv}
-    PEER_SOCKETS['server'].send(json.dumps(client_server_packet))
+    request = {'request' : {'packet' : cipherp, 'from' : source_username, 'iv' : source_iv, 'tag' : tag}}
+    traveler = pickle.dumps(request)
+    traveler = traveler.encode('base64', 'strict')
 
-    
+    #encrypt()
+    PEER_SOCKETS['server'].send(traveler)
 
 
 def confirm_with_server(connection_message):
@@ -313,17 +329,13 @@ def connect_to_peer(args, connection_packet):
     PEER_SOCKETS[name] = new_peer_socket
 
 
-def try_json(data):
-    try:
-        print json.loads(data)
-        return True
-    except Exception as inst:
-        return False
 
 
 
 
 
+###################################################################################
+#  MAIN
 def chat_client(args):
     #for testing REMEMBER TO REMOVE
     PORT = args.send_port
@@ -365,7 +377,6 @@ def chat_client(args):
 
 
         for sock in ready_to_read:
-            print "ya?"
             if sock == receiving_socket:
                 print "got the listener"
                 #verify new connection
@@ -390,19 +401,21 @@ def chat_client(args):
                     data = sock.recv(RECV_BUFFER)
                     if data:
                         #make titles for data packets for sorting and use
-                        sys.stdout.write("\n")
-                        pack = json.loads(data)
+                        sys.stdout.write("\n"); sys.stdout.flush()
+                        pack = pickle.loads(data.decode('base64', 'strict'))
+                        #pack = json.loads(pickled_data)
+                        print pack
                         for key in pack:
-                            if key == 'placeholderbecauseImtoolazytorewriteanything':
+                            if False: #key == 'placeholderbecauseImtoolazytorewriteanything':
                                 print 'im surprised'
                             elif key == 'puzz':
                                 print 'got a puzzle'
                                 solve_puzzle(args, pack)
                             elif key == 'accepted':
                                 print 'server accepted us!'
-                                receive_session_key(pack['accepted'])
+                                receive_session_key(args,pack['accepted'])
                             elif key == 'connection':
-                                print 'red pill'
+                                print 'came inside  connection :red pill'
                                 # step 2 in peer connection
                                 #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
                                 #initiator check first nonce
@@ -426,8 +439,8 @@ def chat_client(args):
                             #print pack
                         #this is probably temporary
                         #print PEER_LIST
-                        sys.stdout.write(data)
-                        sys.stdout.flush()
+                        #sys.stdout.write(data)
+                        #sys.stdout.flush()
                         sys.stdout.write('\n[ME] >'); sys.stdout.flush()
                     else:
                         # remove the socket that's broken

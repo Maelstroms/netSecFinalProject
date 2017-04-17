@@ -1,74 +1,67 @@
-import hashlib
-from random import randint
-from binascii import hexlify
- 
-class DiffieHellman(object):
- 
-	# The following is the prime safe enough 
-	# 6,144 bits introduced in RFC3526 (Might take some time to calculate DH)
-	# predefined_p = 2^6144 - 2^6080 - 1 + 2^64 * { [2^6014 pi] + 929484 }
-	# More values available in https://www.ietf.org/rfc/rfc3526.txt
-	predefined_p = 0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AAAC42DAD33170D04507A33A85521ABDF1CBA64ECFB850458DBEF0A8AEA71575D060C7DB3970F85A6E1E4C7ABF5AE8CDB0933D71E8C94E04A25619DCEE3D2261AD2EE6BF12FFA06D98A0864D87602733EC86A64521F2B18177B200CBBE117577A615D6C770988C0BAD946E208E24FA074E5AB3143DB5BFCE0FD108E4B82D120A92108011A723C12A787E6D788719A10BDBA5B2699C327186AF4E23C1A946834B6150BDA2583E9CA2AD44CE8DBBBC2DB04DE8EF92E8EFC141FBECAA6287C59474E6BC05D99B2964FA090C3A2233BA186515BE7ED1F612970CEE2D7AFB81BDD762170481CD0069127D5B05AA993B4EA988D8FDDC186FFB7DC90A6C08F4DF435C93402849236C3FAB4D27C7026C1D4DCB2602646DEC9751E763DBA37BDF8FF9406AD9E530EE5DB382F413001AEB06A53ED9027D831179727B0865A8918DA3EDBEBCF9B14ED44CE6CBACED4BB1BDB7F1447E6CC254B332051512BD7AF426FB8F401378CD2BF5983CA01C64B92ECF032EA15D1721D03F482D7CE6E74FEF6D55E702F46980C82B5A84031900B1C9E59E7C97FBEC7E8F323A97A7E36CC88BE0F1D45B7FF585AC54BD407B22B4154AACC8F6D7EBF48E1D814CC5ED20F8037E0A79715EEF29BE32806A1D58BB7C5DA76F550AA3D8A1FBFF0EB19CCB1A313D55CDA56C9EC2EF29632387FE8D76E3C0468043E8F663F4860EE12BF2D5B0B7474D6E694F91E6DCC4024FFFFFFFFFFFFFFFF
-	predefined_g = 2
-	
-	# p, g, and publicKey should be open to the other party
-	def __init__(self, p = None, g = None, privateKey = None, publicKey = None):
-		if p is None or g is None:
-			self.p = self.predefined_p
-			self.g = self.predefined_g
-		else:
-			self.p = p
-			self.g = g
-		if privateKey is None or publicKey is None :
-			self.privateKey = self.generatePriKey()
-			self.publicKey = self.generatePubKey()
-		else:
-			self.privateKey = privateKey
-			self.publicKey = publicKey
- 
-	def generatePriKey(self):
-		return randint(2, self.p - 1)
- 
-	def generatePubKey(self):
-		return pow(self.g, self.privateKey, self.p)
- 
-	def generateKey(self, anotherKey):
-		self.sharedSecret = pow(anotherKey, self. privateKey, self.p)
-		s = hashlib.sha256()
-		s.update(str(self.sharedSecret))
-		self.key = s.digest()
-	def getKey(self):
-		return hexlify(self.key)
-		
-	def getKeySize(self):
-		return len(self.key) * 8
- 
-	def showDHKeyExchange(self):
-		print "Prime (p): ", self.p
-		print "Generator (g): ", self.g
-		print "Private key: ", self.privateKey
-		print "Public key: ", self.publicKey
-		print "Shared secret: ", self.sharedSecret
-		print "Shared key: ", self.getKey()
-		print "Size of the key (bits):", self.getKeySize()
- 
-if __name__ == '__main__':
- 
-	# TEST SET : DiffieHellman Key Exchange
-	# alice = DiffieHellman(0x7fffffff, 2)
-	# bob = DiffieHellman(0x7fffffff, 2)
-	
-	alice = DiffieHellman()
-	bob = DiffieHellman()
- 
-	alice.generateKey(bob.publicKey)
-	bob.generateKey(alice.publicKey)
- 
-	if(alice.getKey() == bob.getKey()):
-		print "=============== Alice ==============="
-		alice.showDHKeyExchange()
-		print "===============  Bob  ==============="
-		bob.showDHKeyExchange()
-	else:
-		print "Something is wrong!! Shared keys does not match!!"
- 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import dh
+import os
+import sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes, serialization
+parameters = dh.generate_parameters(generator=2, key_size=512,
+                                     backend=default_backend())
+
+alice_a = parameters.generate_private_key()  ## This is "a" for alice
+alice_public_key = alice_a.public_key() ##This is g^a MOD P
+
+bob_b = parameters.generate_private_key() ## This is "b" for Bob
+bob_public_key = bob_b.public_key() ## This is g^b MOD p
+
+alice_shared_key = alice_a.exchange(bob_public_key)
+bob_shared_key = bob_b.exchange(alice_public_key)
+
+
+
+aes_key = alice_shared_key[0:32]
+
+
+
+
+iv = os.urandom(12)
+f = open("f1.txt", 'rb')
+output = open("f2.txt", 'wb')
+decrypted = open("f3.txt",'wb')
+plaintext = f.read()
+
+    # Construct an AES-GCM Cipher object with the given key and a
+    # randomly generated IV.
+encryptor = Cipher(
+		 algorithms.AES(aes_key),
+        modes.GCM(iv),
+        backend=default_backend()
+).encryptor()
+
+    # associated_data will be authenticated but not encrypted,
+    # it must also be passed in on decryption.
+    
+
+    # Encrypt the plaintext and get the associated ciphertext.
+    # GCM does not require padding.
+ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+
+    
+
+output.write(ciphertext)
+
+tag = encryptor.tag
+
+    
+decryptor = Cipher(
+         algorithms.AES(aes_key),
+         modes.GCM(iv, tag),
+         backend=default_backend()
+).decryptor()
+
+text =  decryptor.update(ciphertext) + decryptor.finalize()
+decrypted.write(text)
+
+f.close()
+output.close()
+decrypted.close()
