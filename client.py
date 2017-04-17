@@ -178,24 +178,9 @@ def receive_session_key(data):
     #print data
     print 'SESSION STUFF'
     server_socket = PEER_SOCKETS['server']
-    # SUPER DANGEROUS, SANITIZE BEFORE TURNING IN
     tagkey = data['tag']
-
-    print 'tag cooperating'
     kt_packet = data['acceptance']
-    # SUPER DANGEROUS, SANITIZE BEFORE TURNING IN
     iv = data['IV']
-    print 'IV?'
-    print iv
-    #pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
-
-    #user tgt
-    # print 'peers'
-    # print PEER_LIST
-    # tgt = pickle_tgt_key['TGT']
-    # print 'TGT'
-    # print tgt
-    # PEER_LIST[args.user]['TGT'] = tgt
 
 
     decryptor = Cipher(
@@ -203,17 +188,14 @@ def receive_session_key(data):
                     modes.GCM(iv, tagkey),
                     backend=default_backend()
                     ).decryptor()
-    print kt_packet
-    decrypted_packet = decryptor.update(kt_packet) + decryptor.finalize()
-    print decrypted_packet
-    #key_cipher = pickle_tgt_key['session_key']
 
-    #server_session_key
-    #recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
-    PEER_LIST['server']['session_key'] = recv_key_plaintext
+
+    decrypted_packet = decryptor.update(kt_packet) + decryptor.finalize()
+    PEER_LIST['server']['session_key'] = decrypted_packet
 
 
     print 'TGT and session key received'
+    print PEER_LIST
     print 'Connected to remote server. You can start sending messages'
 
 
@@ -244,8 +226,9 @@ def format_peer_communication(message):
 def find_peer_from_server(args, peer_name):
     global Server_Nonce
     Server_Nonce = random.randint(0,65535)
-    request = {'request': {'name':peer_name,'tgt':args.user,'Na':Server_Nonce}}
-    packet = json.dumps(request)
+    encrypted_section = {'name':peer_name,'tgt':args.user,'Na':Server_Nonce}
+    request = {'request': encrypted_section}
+    packet = pickle.dumps(request).encode('base64', 'strict')
     #encrypt()
     PEER_SOCKETS['server'].send(packet)
 
@@ -263,15 +246,19 @@ def confirm_with_server(connection_message):
     del packet['peer']
     del packet['Kab']
     del packet['g^a mod p']
-    ready = {'peer_confirmation': packet}
-    PEER_SOCKETS['server'].send(json.dumps(ready))
+    encryption_prep = json.dumps(packet)
+    ready = {'peer_confirmation': encryption_prep}
+    pickled_packet = pickle.dumps(ready).encode('base64', 'strict')
+    PEER_SOCKETS['server'].send(pickled_packet)
 
 
 def accept_peer_connection(pack, sock):
     for x in MESSAGE_QUEUE:
         if pack['peer'] == x['recipient']:
             x['Nb+1'] = pack['Nb']+1
-            sock.send(json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x))))
+            encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
+            pickled_packet = pickle.dumps({'message': encryption_prep}).encode('base64', 'strict')
+            sock.send(pickled_packet)
 
             break
 
@@ -305,7 +292,9 @@ def connect_to_peer(args, connection_packet):
     pack['peer_packet']['peer'] = args.user
     pack['peer_packet']['Na'] = Peer_Nonce
     pack['peer_packet']['g^a mod p'] = random.randint(EX,P)
-    new_peer_socket.send(json.dumps(pack['peer_packet']))
+    encryption_prep = json.dumps(pack['peer_packet'])
+    pickle_barrel = pickle.dumps(encryption_prep).encode('base64', 'strict')
+    new_peer_socket.send(pickle_barrel)
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
 
@@ -419,7 +408,7 @@ def chat_client(args):
                             #print pack
                         #this is probably temporary
                         #print PEER_LIST
-                        sys.stdout.write(data)
+                        #sys.stdout.write(data)
                         sys.stdout.flush()
                         sys.stdout.write('\n[ME] >'); sys.stdout.flush()
                     else:

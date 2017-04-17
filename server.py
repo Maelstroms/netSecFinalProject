@@ -96,7 +96,10 @@ def check_puzzle():
     pass
 
 def connect_user_to_peer(request):
+    print 'Sending address'
+    # print request
     unpack = request['request']
+
     user = unpack['tgt']
     peer = unpack['name']
     Na = unpack['Na'] + 1
@@ -106,16 +109,20 @@ def connect_user_to_peer(request):
     peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
     #encrypt this
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
-    packet = json.dumps({'connection': prep})
-    print packet
+    packet = pickle.dumps({'connection': prep}).encode('base64', 'strict')
     CLIENT_SOCKETS[user].send(packet)
+    print "all cool"
 
 
 def confirm_connection(request):
-    packet = request['peer_confirmation']
+    print "peer 2 wants confirmation"
+
+    packet = json.loads(request['peer_confirmation'])
     peer = packet['tgt']
     confirmation = {'Nb+1': packet['Nb']+1}
-    CLIENT_SOCKETS[peer].send(json.dumps(confirmation))
+    encryption_prep = json.dumps(confirmation)
+    pickle_barrel = pickle.dumps({'gtg': encryption_prep}).encode('base64', 'strict')
+    CLIENT_SOCKETS[peer].send(pickle_barrel)
 
 
 # time.time() returns the time as a floating point number expressed in seconds since the epoch, in UTC.
@@ -174,7 +181,7 @@ def chat_server():
                 print("got a hit")
                 sockfd, addr = server_socket.accept()
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
-                print newUser
+                # print newUser
                 for name in newUser:
                     CLIENT_LIST[name] = newUser[name]
                 user_name = newUser.keys()[0]
@@ -189,15 +196,12 @@ def chat_server():
 
                 puz_num = PUZZLE_ANSWERS.keys()[0]
 
-                print puz_num
-                print PUZZLE_ANSWERS[puz_num]
-
                 sockfd.send(pickle.dumps({'puzz':puz_num}).encode('base64', 'strict'))
 ####################################################################################
 
                 aes_packet =  sockfd.recv(RECV_BUFFER)
                 print 'aes packet'
-                print aes_packet
+                # print aes_packet
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
                 crypt_answer = aes_packet_pickle['solution']
                 user_iv = aes_packet_pickle['iv']
@@ -211,12 +215,9 @@ def chat_server():
                     backend=default_backend()
                     ).decryptor()
 
-                print 'encrypted packet'
-                print crypt_answer
                 decrypted_puzz_packet = decryptor.update(crypt_answer) + decryptor.finalize()
                 decrypted_puzz_packet = json.loads(decrypted_puzz_packet    )
-                print 'decripted_puzz_pack'
-                print decrypted_puzz_packet
+
                 puz_answer = decrypted_puzz_packet['puzzle']
 
                 if(puz_answer != PUZZLE_ANSWERS[puz_num]) :
@@ -250,7 +251,7 @@ def chat_server():
                 print 'SESSION PACKET'
                 traveler = pickle.dumps(accept_user_packet)
                 traveler = traveler.encode('base64', 'strict')
-                print traveler
+                # print traveler
                 sockfd.send(traveler)
 
                 CLIENT_LIST[user_name] = newUser[user_name]
@@ -271,7 +272,8 @@ def chat_server():
                     data = sock.recv(RECV_BUFFER)
                     if data:
                         print 'data data'
-                        request = json.loads(data)
+                        request = pickle.loads(data.decode('base64', 'strict'))
+                        # request = json.loads(data)
                         print request
                         #received request to connect to peer
                         for key in request:
