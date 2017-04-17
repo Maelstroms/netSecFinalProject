@@ -130,21 +130,15 @@ def create_new_tgt (username) :
                     backend=default_backend()
                     ).encryptor()
 
-    #cipherskey = encryptor.update(USER_LIST[username]['session_key']) + encryptor.finalize()
     proto_session= USER_LIST[username]['session_key']
-    print proto_session
     proto_tgt = [username,repr(proto_session),time.time()]
-    print proto_tgt
-    CLIENT_LIST[username]['TGT'] = proto_tgt
     string_tgt = json.dumps(proto_tgt, ensure_ascii=False)
-    print string_tgt
     cipher_TGT = encryptor.update(repr(string_tgt))+ encryptor.finalize()
+    tgt_encryption_tag = encryptor.tag
 
-    tagskey = encryptor.tag
+    CLIENT_LIST[username]['TGT'] = [cipher_TGT, tgt_encryption_tag]
 
-
-    print "it's ok"
-    return proto_tgt, [tagskey]
+    return cipher_TGT, [tgt_encryption_tag]
 
 #check_expired_tgt : TGT -> TGT
 #GIVEN : TGT
@@ -217,7 +211,13 @@ def chat_server():
                     backend=default_backend()
                     ).decryptor()
 
-                puz_answer =  int(decryptor.update(crypt_answer) + decryptor.finalize())
+                print 'encrypted packet'
+                print crypt_answer
+                decrypted_puzz_packet = decryptor.update(crypt_answer) + decryptor.finalize()
+                decrypted_puzz_packet = json.loads(decrypted_puzz_packet    )
+                print 'decripted_puzz_pack'
+                print decrypted_puzz_packet
+                puz_answer = decrypted_puzz_packet['puzzle']
 
                 if(puz_answer != PUZZLE_ANSWERS[puz_num]) :
                     print ("User is malicious")
@@ -237,19 +237,23 @@ def chat_server():
 
 
                 tgt,tagsserver = create_new_tgt(user_name)
-                usessionkey = USER_LIST[user_name]['session_key']
+                usersionkey = USER_LIST[user_name]['session_key']
 
-                cipherskey = encryptor.update(usessionkey) + encryptor.finalize()
+                #cipherskey = encryptor.update(usersionkey) + encryptor.finalize()
+
+
+
+
+
+
+                cipherkt = {'TGT' : repr(tgt), 'session_key' : repr(usersionkey), 'Na+1': decrypted_puzz_packet['Na']+1}
+                cipherkt = encryptor.update(json.dumps(cipherkt, ensure_ascii=False)) + encryptor.finalize()
+                #cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
+
                 tagkey = encryptor.tag
                 tagkeyen = base64.b64encode(tagkey)
-
-
-                sockfd.send(tagkeyen)
-
-                cipherkt = {'TGT' : tgt, 'session_key' : cipherskey}
-                cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
-
-                sockfd.send(cipherkt_packet_pickle)
+                accept_user_packet = {'accepted': {'acceptance':repr(cipherkt), 'tag':tagkeyen}}
+                sockfd.send(json.dumps(accept_user_packet, ensure_ascii=False))
 
                 CLIENT_LIST[user_name] = newUser[user_name]
                 CLIENT_SOCKETS[user_name] = sockfd
@@ -258,13 +262,7 @@ def chat_server():
                 print SOCKET_LIST
                 print CLIENT_SOCKETS
                 print CLIENT_LIST
-                brd = {"peer": CLIENT_LIST}
-                brd = json.dumps(brd)
-                print brd
 
-
-                    # newUser = sock.recv(RECV_BUFFER)
-                    # CLIENT_LIST.append(newUser)
 
 
             #not a new connection

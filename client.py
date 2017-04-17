@@ -157,36 +157,37 @@ def solve_puzzle(args, pack):
         backend=default_backend()
     ).encryptor()
 
+    Na = random.randint(0,65535)
+    puzz_ans_packet = {'puzzle': ans_puz, 'Na': Na}
+    packet_prep = json.dumps(puzz_ans_packet, ensure_ascii=False)
 
-    cipherpuzzle = encryptor.update(str(ans_puz)) + encryptor.finalize()
+    cipherpuzzle = encryptor.update(packet_prep) + encryptor.finalize()
     tag = encryptor.tag
 
 
     aes_packet = {'solution' : cipherpuzzle, 'iv' : MASTER_IV, 'tag' : tag}
-    print 'aes'
-    print aes_packet
     #print json.dumps(aes_packet, ensure_ascii=False)
     aes_packet_pickle = pickle.dumps(aes_packet).encode('base64', 'strict')
-    print 'aes pickle'
-    print aes_packet_pickle
+
 
     server_socket.send(aes_packet_pickle)
 
 
 
-
-###################################################
-    tagkey = base64.b64decode(server_socket.recv(RECV_BUFFER))
-    kt_packet = server_socket.recv(RECV_BUFFER)
-    pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
+def receive_session_key(data):
+    print data
+    server_socket = PEER_SOCKETS['server']
+    tagkey = data['tag']
+    kt_packet = data['acceptance']
+    #pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
 
     #user tgt
-    print 'peers'
-    print PEER_LIST
-    tgt = pickle_tgt_key['TGT']
-    print 'TGT'
-    print tgt
-    PEER_LIST[args.user]['TGT'] = tgt
+    # print 'peers'
+    # print PEER_LIST
+    # tgt = pickle_tgt_key['TGT']
+    # print 'TGT'
+    # print tgt
+    # PEER_LIST[args.user]['TGT'] = tgt
 
 
     decryptor = Cipher(
@@ -201,8 +202,6 @@ def solve_puzzle(args, pack):
     recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
     PEER_LIST['server']['session_key'] = recv_key_plaintext
 
-    print 'PEEERS222222'
-    print PEER_LIST
 
     print 'TGT and session key received'
     print 'Connected to remote server. You can start sending messages'
@@ -301,6 +300,14 @@ def connect_to_peer(args, connection_packet):
     PEER_SOCKETS[name] = new_peer_socket
 
 
+def try_json(data):
+    try:
+        print json.loads(data)
+        return True
+    except Exception as inst:
+        return False
+
+
 
 
 
@@ -371,7 +378,6 @@ def chat_client(args):
                     if data:
                         #make titles for data packets for sorting and use
                         sys.stdout.write("\n")
-                        # this may need to change
                         pack = json.loads(data)
                         for key in pack:
                             if key == 'placeholderbecauseImtoolazytorewriteanything':
@@ -379,6 +385,9 @@ def chat_client(args):
                             elif key == 'puzz':
                                 print 'got a puzzle'
                                 solve_puzzle(args, pack)
+                            elif key == 'accepted':
+                                print 'server accepted us!'
+                                receive_session_key(pack['accepted'])
                             elif key == 'connection':
                                 print 'red pill'
                                 # step 2 in peer connection
