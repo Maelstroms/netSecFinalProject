@@ -174,7 +174,7 @@ def solve_puzzle(args, pack):
 
 
 
-def receive_session_key(data):
+def receive_session_key(args, data):
     #print data
     print 'SESSION STUFF'
     server_socket = PEER_SOCKETS['server']
@@ -190,8 +190,11 @@ def receive_session_key(data):
                     ).decryptor()
 
 
-    decrypted_packet = decryptor.update(kt_packet) + decryptor.finalize()
-    PEER_LIST['server']['session_key'] = decrypted_packet
+    decrypted_packet = json.loads(decryptor.update(kt_packet) + decryptor.finalize())
+    print decrypted_packet
+    #add nonce check
+    PEER_LIST['server']['session_key'] = decrypted_packet['session_key']
+    PEER_LIST[args.user]['TGT'] = decrypted_packet['TGT']
 
 
     print 'TGT and session key received'
@@ -210,7 +213,15 @@ def send_command(msg):
     for name in PEER_SOCKETS:
         if sending[1] == name:
             print "sending to existing peer"
-            PEER_SOCKETS[name].send(json.dumps({'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}}))
+            key = PEER_LIST[name][encryption_key]
+            iv = os.urandom(32)
+            # encryptor = Cipher(
+    #                 algorithms.AES(key),
+    #                 modes.GCM(user_iv),
+    #                 backend=default_backend()
+    #                 ).encryptor()
+            encryption_prep = json.dumps({'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}})
+            PEER_SOCKETS[name].send()
     else:
         print "need to connect to new peer"
         #step 1 in confirming a new peer
@@ -298,14 +309,36 @@ def server_legitimizes(new_peer, sockfd):
 def accept_peer_connection(pack, sock):
     print "send chached message"
     pack = json.loads(pack['peer'])
+    name = pack['peer']
     for x in MESSAGE_QUEUE:
-        if pack['peer'] == x['recipient']:
+        if name == x['recipient']:
             x['Nb+1'] = pack['Nb']+1
             encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
-            pickled_packet = pickle.dumps({'message': encryption_prep}).encode('base64', 'strict')
+            key = PEER_LIST[name][encryption_key]
+            iv = os.urandom(32)
+        #   encryptor = Cipher(
+        #                 algorithms.AES(key),
+        #                 modes.GCM(user_iv),
+        #                 backend=default_backend()
+        #                 ).encryptor()
+            # cipherkt = encryptor.update(json.dumps(cipherkt)) + encryptor.finalize()
+            # tagkey = encryptor.tag
+
+            pickled_packet = pickle.dumps({'p2p': encryption_prep}).encode('base64', 'strict')
             sock.send(pickled_packet)
 
             break
+
+def decode_p2p(pack):
+    print pack
+    key = PEER_LIST[name][encryption_key]
+    # tag = pack['TAG']
+    # iv = pack['IV']
+    # decryptor = Cipher(
+    #                 algorithms.AES(key),
+    #                 modes.GCM(user_iv, user_tag),
+    #                 backend=default_backend()
+    #                 ).decryptor()
 
 
 
@@ -400,7 +433,7 @@ def chat_client(args):
                                 solve_puzzle(args, pack)
                             elif key == 'accepted':
                                 print 'server accepted us!'
-                                receive_session_key(pack['accepted'])
+                                receive_session_key(args, pack['accepted'])
                             elif key == 'connection':
                                 print 'red pill'
                                 # step 2 in peer connection
@@ -417,8 +450,8 @@ def chat_client(args):
                                 #     print "bad nonce 2"
                                 #     print pack['Na+1']
                                 #     print Peer_Nonce
-                            # elif key == 'peer_confirmation':
-                            #     server_legitimizes(pack)
+                            elif key == 'p2p':
+                                decode_p2p(pack)
 
                         else:
                             print 'runoff'
