@@ -27,10 +27,8 @@ backend = default_backend()
 
 TGT = {}
 #final form of Peer entries:
-#'Alice':{'ADDRESS': ['127.0.0.1', 9091]}
-#PEER_LIST = {}
-
-PEER_LIST = {'Alice':{'ADDRESS': ['127.0.0.1', 9091]},'Bob':{'ADDRESS': ['127.0.0.1', 9092]}}
+#'Alice':{'ADDRESS': ['127.0.0.1', 9091], 'TGT':{}, 'encryption_key':key}
+PEER_LIST = {}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
 RECV_BUFFER = 4096
@@ -81,7 +79,7 @@ def encryptor(key,iv,plaintext):
     return ciphertext,tag
 
 
-def decryptor(key,iv,tag,ciphertext)
+def decryptor(key,iv,tag,ciphertext):
 
     decryptor = Cipher(
          algorithms.AES(key),
@@ -124,7 +122,7 @@ def server_authentication(args):
     server_address = args.server
     port = args.port
 
-    PEER_LIST['server'] = (server_address, port)
+    PEER_LIST['server'] = {'ADDRESS' : (server_address, port)}
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.settimeout(2)
@@ -138,7 +136,7 @@ def server_authentication(args):
         sys.exit()
 
 
-    packet = {args.user: {'ADDRESS' : PEER_LIST[args.user]}}
+    packet = {args.user: PEER_LIST[args.user]}
 
 
     first_packet = json.dumps(packet)
@@ -147,12 +145,9 @@ def server_authentication(args):
     PEER_SOCKETS['server'] = server_socket
 
 
-def solve_puzzle(pack):
+def solve_puzzle(args, pack):
     server_socket = PEER_SOCKETS['server']
     puz_num = pack['puzz']
-    print "puzzle package"
-    print puz_num
-
 
     ans_puz = len (get_primes(puz_num))
 
@@ -168,10 +163,12 @@ def solve_puzzle(pack):
 
 
     aes_packet = {'solution' : cipherpuzzle, 'iv' : MASTER_IV, 'tag' : tag}
+    print 'aes'
     print aes_packet
     #print json.dumps(aes_packet, ensure_ascii=False)
     aes_packet_pickle = pickle.dumps(aes_packet).encode('base64', 'strict')
-
+    print 'aes pickle'
+    print aes_packet_pickle
 
     server_socket.send(aes_packet_pickle)
 
@@ -183,8 +180,13 @@ def solve_puzzle(pack):
     kt_packet = server_socket.recv(RECV_BUFFER)
     pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
 
+    #user tgt
+    print 'peers'
+    print PEER_LIST
     tgt = pickle_tgt_key['TGT']
-
+    print 'TGT'
+    print tgt
+    PEER_LIST[args.user]['TGT'] = tgt
 
 
     decryptor = Cipher(
@@ -195,7 +197,12 @@ def solve_puzzle(pack):
 
     key_cipher = pickle_tgt_key['session_key']
 
+    #server_session_key
     recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
+    PEER_LIST['server']['session_key'] = recv_key_plaintext
+
+    print 'PEEERS222222'
+    print PEER_LIST
 
     print 'TGT and session key received'
     print 'Connected to remote server. You can start sending messages'
@@ -269,7 +276,7 @@ def connect_to_peer(args, connection_packet):
     addr =pack['peer'][1]['ADDRESS']
     print 'connecting to peer'
 
-    PEER_LIST[name] = addr
+    PEER_LIST[name] = {'ADDRESS': addr}
     # print name
     # print addr
     # print addr[0]
@@ -307,7 +314,7 @@ def chat_client(args):
     global Server_Nonce
     global Peer_Nonce
     #for self identification
-    PEER_LIST[args.user] = ('127.0.0.1', PORT)
+    PEER_LIST[args.user] = {'ADDRESS': ['127.0.0.1', PORT]}
 
     #Exchange credentials from server
     server_authentication(args)
@@ -371,7 +378,7 @@ def chat_client(args):
                                 print 'im surprised'
                             elif key == 'puzz':
                                 print 'got a puzzle'
-                                solve_puzzle(pack)
+                                solve_puzzle(args, pack)
                             elif key == 'connection':
                                 print 'red pill'
                                 # step 2 in peer connection

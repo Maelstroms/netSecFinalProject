@@ -15,47 +15,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import pickle
 
-def encryptor(key,iv,plaintext):
-    
-    
-    # Construct an AES-GCM Cipher object with the given key and a
-    # randomly generated IV.
-    encryptor = Cipher(
-        algorithms.AES(key),
-        modes.GCM(iv),
-        backend=default_backend()
-    ).encryptor()
-
-    # associated_data will be authenticated but not encrypted,
-    # it must also be passed in on decryption.
-    
-
-    # Encrypt the plaintext and get the associated ciphertext.
-    # GCM does not require padding.
-    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
-    
-    tag = encryptor.tag
-
-    return ciphertext,tag
-
-
-def decryptor(key,iv,tag,ciphertext)
-    
-    decryptor = Cipher(
-         algorithms.AES(key),
-         modes.GCM(iv, tag),
-         backend=default_backend()
-    ).decryptor()
-
-    plaintext =  decryptor.update(ciphertext) + decryptor.finalize()
-    
-    return plaintext
-
 
 def arguments(arglist):
     parser = argparse.ArgumentParser(description='Simple chat server')
     parser.add_argument('-sp', dest='port', required=True, type=int, help="port you want to use for server")
     return parser.parse_args(arglist)
+
 
 SERVER_MASTER_KEY = os.urandom(32)
 SERVER_MASTER_IV = os.urandom(32)
@@ -68,9 +33,7 @@ SOCKET_LIST = []
 #CLIENT_SOCKETS is a dictionary that allows easy recall of a client's socket
 CLIENT_SOCKETS = {}
 #Client list tracks online users and addresses to connect peers
-#CLIENT_LIST = {}
-CLIENT_LIST = {'Alice':{'ADDRESS': ['127.0.0.1', 9091]},'Bob':{'ADDRESS': ['127.0.0.1', 9092]}}
-#user list with passwords
+CLIENT_LIST = {}
 
 digest = hashes.Hash(hashes.SHA256(), backend=default_backend())
 digest.update(b"awesome")
@@ -89,6 +52,45 @@ USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1',
 PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
 RECV_BUFFER = 4096
 PORT = args.port
+
+def encryptor(key,iv,plaintext):
+
+
+    # Construct an AES-GCM Cipher object with the given key and a
+    # randomly generated IV.
+    encryptor = Cipher(
+        algorithms.AES(key),
+        modes.GCM(iv),
+        backend=default_backend()
+    ).encryptor()
+
+    # associated_data will be authenticated but not encrypted,
+    # it must also be passed in on decryption.
+
+
+    # Encrypt the plaintext and get the associated ciphertext.
+    # GCM does not require padding.
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+
+    tag = encryptor.tag
+
+    return ciphertext,tag
+
+
+def decryptor(key,iv,tag,ciphertext):
+
+    decryptor = Cipher(
+         algorithms.AES(key),
+         modes.GCM(iv, tag),
+         backend=default_backend()
+    ).decryptor()
+
+    plaintext =  decryptor.update(ciphertext) + decryptor.finalize()
+
+    return plaintext
+
+
+
 
 def check_puzzle():
     pass
@@ -128,13 +130,21 @@ def create_new_tgt (username) :
                     backend=default_backend()
                     ).encryptor()
 
-    cipherskey = encryptor.update(USER_LIST[username]['session_key']) + encryptor.finalize()
+    #cipherskey = encryptor.update(USER_LIST[username]['session_key']) + encryptor.finalize()
+    proto_session= USER_LIST[username]['session_key']
+    print proto_session
+    proto_tgt = [username,repr(proto_session),time.time()]
+    print proto_tgt
+    CLIENT_LIST[username]['TGT'] = proto_tgt
+    string_tgt = json.dumps(proto_tgt, ensure_ascii=False)
+    print string_tgt
+    cipher_TGT = encryptor.update(repr(string_tgt))+ encryptor.finalize()
+
     tagskey = encryptor.tag
 
-   # timetgt = time.time()
-   # ciphertime = encryptor.update(timetgt) + encryptor.finalize()
-   # tagtime = encryptor.tag
-    return [username,cipherskey,time.time()], [tagskey]
+
+    print "it's ok"
+    return proto_tgt, [tagskey]
 
 #check_expired_tgt : TGT -> TGT
 #GIVEN : TGT
@@ -171,6 +181,8 @@ def chat_server():
                 sockfd, addr = server_socket.accept()
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
                 print newUser
+                for name in newUser:
+                    CLIENT_LIST[name] = newUser[name]
                 user_name = newUser.keys()[0]
 
                 if(USER_LIST.has_key(user_name)) :
