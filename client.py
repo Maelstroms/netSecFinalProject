@@ -231,7 +231,6 @@ def find_peer_from_server(args, peer_name):
     encrypted_section = {'name':peer_name,'tgt':args.user,'Na':Server_Nonce}
     request = {'request': encrypted_section}
     packet = pickle.dumps(request).encode('base64', 'strict')
-    #encrypt()
     PEER_SOCKETS['server'].send(packet)
 
 
