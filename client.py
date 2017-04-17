@@ -31,7 +31,7 @@ TGT = {}
 PEER_LIST = {}
 PEER_SOCKETS = {}
 SOCKET_LIST =[]
-RECV_BUFFER = 4096
+RECV_BUFFER = 8192
 HOST = ''
 PORT = random.randint(0,65535)
 
@@ -159,7 +159,7 @@ def solve_puzzle(args, pack):
 
     Na = random.randint(0,65535)
     puzz_ans_packet = {'puzzle': ans_puz, 'Na': Na}
-    packet_prep = json.dumps(puzz_ans_packet, ensure_ascii=False)
+    packet_prep = json.dumps(puzz_ans_packet)
 
     cipherpuzzle = encryptor.update(packet_prep) + encryptor.finalize()
     tag = encryptor.tag
@@ -175,10 +175,18 @@ def solve_puzzle(args, pack):
 
 
 def receive_session_key(data):
-    print data
+    #print data
+    print 'SESSION STUFF'
     server_socket = PEER_SOCKETS['server']
+    # SUPER DANGEROUS, SANITIZE BEFORE TURNING IN
     tagkey = data['tag']
+
+    print 'tag cooperating'
     kt_packet = data['acceptance']
+    # SUPER DANGEROUS, SANITIZE BEFORE TURNING IN
+    iv = data['IV']
+    print 'IV?'
+    print iv
     #pickle_tgt_key = pickle.loads(kt_packet.decode('base64', 'strict'))
 
     #user tgt
@@ -192,14 +200,16 @@ def receive_session_key(data):
 
     decryptor = Cipher(
                     algorithms.AES(MASTER_KEY),
-                    modes.GCM(MASTER_IV, tagkey),
+                    modes.GCM(iv, tagkey),
                     backend=default_backend()
                     ).decryptor()
-
-    key_cipher = pickle_tgt_key['session_key']
+    print kt_packet
+    decrypted_packet = decryptor.update(kt_packet) + decryptor.finalize()
+    print decrypted_packet
+    #key_cipher = pickle_tgt_key['session_key']
 
     #server_session_key
-    recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
+    #recv_key_plaintext = decryptor.update(key_cipher) + decryptor.finalize()
     PEER_LIST['server']['session_key'] = recv_key_plaintext
 
 
@@ -300,17 +310,13 @@ def connect_to_peer(args, connection_packet):
     PEER_SOCKETS[name] = new_peer_socket
 
 
-def try_json(data):
-    try:
-        print json.loads(data)
-        return True
-    except Exception as inst:
-        return False
 
 
 
 
 
+###################################################################################
+#  MAIN
 def chat_client(args):
     #for testing REMEMBER TO REMOVE
     PORT = args.send_port
@@ -352,7 +358,6 @@ def chat_client(args):
 
 
         for sock in ready_to_read:
-            print "ya?"
             if sock == receiving_socket:
                 print "got the listener"
                 #verify new connection
@@ -377,10 +382,11 @@ def chat_client(args):
                     data = sock.recv(RECV_BUFFER)
                     if data:
                         #make titles for data packets for sorting and use
-                        sys.stdout.write("\n")
-                        pack = json.loads(data)
+                        sys.stdout.write("\n"); sys.stdout.flush()
+                        pack = pickle.loads(data.decode('base64', 'strict'))
+                        #pack = json.loads(pickled_data)
                         for key in pack:
-                            if key == 'placeholderbecauseImtoolazytorewriteanything':
+                            if False: #key == 'placeholderbecauseImtoolazytorewriteanything':
                                 print 'im surprised'
                             elif key == 'puzz':
                                 print 'got a puzzle'

@@ -50,7 +50,7 @@ USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1',
             'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': eve_session_key}}
 
 PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
-RECV_BUFFER = 4096
+RECV_BUFFER = 8192
 PORT = args.port
 
 def encryptor(key,iv,plaintext):
@@ -132,7 +132,7 @@ def create_new_tgt (username) :
 
     proto_session= USER_LIST[username]['session_key']
     proto_tgt = [username,repr(proto_session),time.time()]
-    string_tgt = json.dumps(proto_tgt, ensure_ascii=False)
+    string_tgt = json.dumps(proto_tgt)
     cipher_TGT = encryptor.update(repr(string_tgt))+ encryptor.finalize()
     tgt_encryption_tag = encryptor.tag
 
@@ -192,7 +192,7 @@ def chat_server():
                 print puz_num
                 print PUZZLE_ANSWERS[puz_num]
 
-                sockfd.send(json.dumps({'puzz':puz_num}))
+                sockfd.send(pickle.dumps({'puzz':puz_num}).encode('base64', 'strict'))
 ####################################################################################
 
                 aes_packet =  sockfd.recv(RECV_BUFFER)
@@ -240,20 +240,18 @@ def chat_server():
                 usersionkey = USER_LIST[user_name]['session_key']
 
                 #cipherskey = encryptor.update(usersionkey) + encryptor.finalize()
-
-
-
-
-
-
                 cipherkt = {'TGT' : repr(tgt), 'session_key' : repr(usersionkey), 'Na+1': decrypted_puzz_packet['Na']+1}
-                cipherkt = encryptor.update(json.dumps(cipherkt, ensure_ascii=False)) + encryptor.finalize()
-                #cipherkt_packet_pickle = pickle.dumps(cipherkt).encode('base64', 'strict')
+                cipherkt = encryptor.update(json.dumps(cipherkt)) + encryptor.finalize()
+                cipherkt_packet_pickle = cipherkt
 
                 tagkey = encryptor.tag
-                tagkeyen = base64.b64encode(tagkey)
-                accept_user_packet = {'accepted': {'acceptance':repr(cipherkt), 'tag':tagkeyen}}
-                sockfd.send(json.dumps(accept_user_packet, ensure_ascii=False))
+                #tagkeyen = base64.b64encode(tagkey)
+                accept_user_packet = {'accepted': {'acceptance':cipherkt_packet_pickle, 'tag':tagkey, 'IV':user_iv}}
+                print 'SESSION PACKET'
+                traveler = pickle.dumps(accept_user_packet)
+                traveler = traveler.encode('base64', 'strict')
+                print traveler
+                sockfd.send(traveler)
 
                 CLIENT_LIST[user_name] = newUser[user_name]
                 CLIENT_SOCKETS[user_name] = sockfd
