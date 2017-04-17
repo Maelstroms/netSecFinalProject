@@ -304,6 +304,12 @@ def chat_server():
                     else:
                         # remove the socket that's broken
                         if sock in SOCKET_LIST:
+                            for key in CLIENT_SOCKETS:
+                                if CLIENT_SOCKETS[key] == sock:
+                                    print key + " has logged off"
+                                    del CLIENT_LIST[key]
+                                    del CLIENT_SOCKETS[key]
+                                    break
                             SOCKET_LIST.remove(sock)
                             break
 

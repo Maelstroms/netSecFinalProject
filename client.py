@@ -501,6 +501,7 @@ def chat_client(args):
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
             elif str(msg[:6]) == "logout":
                 print 'done'
+                return 'out'
             else:
                 print "did we hit?"
                 #print("Unrecognized command")
