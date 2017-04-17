@@ -106,7 +106,7 @@ def connect_user_to_peer(request):
     shared_secret= random.randint(0,65535)
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
-    peer_encryption = {'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer}
+    peer_encryption = json.dumps({'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer})
     #encrypt this
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = pickle.dumps({'connection': prep}).encode('base64', 'strict')
@@ -282,7 +282,6 @@ def chat_server():
                             elif key == 'request':
                                 connect_user_to_peer(request)
                             elif key == 'peer_confirmation':
-                                print request
                                 confirm_connection(request)
 
 

@@ -205,6 +205,7 @@ def list_command():
 
 
 def send_command(msg):
+    print 'got a command to send a message'
     sending = msg.split()
     for name in PEER_SOCKETS:
         if sending[1] == name:
@@ -218,12 +219,13 @@ def send_command(msg):
 
 
 def format_peer_communication(message):
-
+    print 'cache message for later'
     packet = {'recipient':message[1], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
     MESSAGE_QUEUE.append(packet)
 
 
 def find_peer_from_server(args, peer_name):
+    print "get address from server"
     global Server_Nonce
     Server_Nonce = random.randint(0,65535)
     encrypted_section = {'name':peer_name,'tgt':args.user,'Na':Server_Nonce}
@@ -233,45 +235,14 @@ def find_peer_from_server(args, peer_name):
     PEER_SOCKETS['server'].send(packet)
 
 
-def confirm_with_server(connection_message):
-    # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
-    #{Ns+1 || TGT(bob) || Nb}Sb
-    packet = {}
-    for key in connection_message:
-        packet[key] = connection_message[key]
-    packet['Ns'] = packet['Ns']+1
-    Peer_Nonce = random.randint(0,65535)
-    packet['Nb'] = Peer_Nonce
-
-    del packet['peer']
-    del packet['Kab']
-    del packet['g^a mod p']
-    encryption_prep = json.dumps(packet)
-    ready = {'peer_confirmation': encryption_prep}
-    pickled_packet = pickle.dumps(ready).encode('base64', 'strict')
-    PEER_SOCKETS['server'].send(pickled_packet)
-
-
-def accept_peer_connection(pack, sock):
-    for x in MESSAGE_QUEUE:
-        if pack['peer'] == x['recipient']:
-            x['Nb+1'] = pack['Nb']+1
-            encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
-            pickled_packet = pickle.dumps({'message': encryption_prep}).encode('base64', 'strict')
-            sock.send(pickled_packet)
-
-            break
-
 
 def connect_to_peer(args, connection_packet):
+    print "connecting to peer"
     global Peer_Nonce
     # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
     pack = connection_packet['connection']
-    print pack
     name = pack['peer'][0]
     addr =pack['peer'][1]['ADDRESS']
-    print 'connecting to peer'
-
     PEER_LIST[name] = {'ADDRESS': addr}
     # print name
     # print addr
@@ -288,15 +259,57 @@ def connect_to_peer(args, connection_packet):
         print 'Unable to connect'
         #sys.exit()
 
+    print "passing on packet"
     Peer_Nonce = random.randint(0,65535)
-    pack['peer_packet']['peer'] = args.user
-    pack['peer_packet']['Na'] = Peer_Nonce
-    pack['peer_packet']['g^a mod p'] = random.randint(EX,P)
-    encryption_prep = json.dumps(pack['peer_packet'])
-    pickle_barrel = pickle.dumps(encryption_prep).encode('base64', 'strict')
+    forwarded_message = {'return_to_server':pack['peer_packet']}
+    forwarded_message['peer'] = args.user
+    forwarded_message['Na'] = Peer_Nonce
+    forwarded_message['g^a mod p'] = random.randint(EX,P)
+    encryption_prep = json.dumps(forwarded_message)
+    pickle_barrel = pickle.dumps({'peer':encryption_prep}).encode('base64', 'strict')
     new_peer_socket.send(pickle_barrel)
+
     SOCKET_LIST.append(new_peer_socket)
     PEER_SOCKETS[name] = new_peer_socket
+
+
+def confirm_with_server(connection_message):
+    print "ask server for legitimacy"
+    # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
+    #{Ns+1 || TGT(bob) || Nb}Sb
+    message_from_A = json.loads(connection_message['peer'])
+    message_to_server = json.loads(message_from_A['return_to_server'])
+    message_to_server['Ns'] = message_to_server['Ns']+1
+    Peer_Nonce = random.randint(0,65535)
+    message_to_server['Nb'] = Peer_Nonce
+
+
+    encryption_prep = json.dumps(message_to_server)
+    ready = {'peer_confirmation': encryption_prep}
+    pickled_packet = pickle.dumps(ready).encode('base64', 'strict')
+    PEER_SOCKETS['server'].send(pickled_packet)
+
+def server_legitimizes(new_peer, sockfd):
+    print 'responding to hopeful peer'
+    new_peer = json.loads(new_peer['peer'])
+    encryption_prep = json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': random.randint(EX,P), 'Nb': random.randint(0,65535)})
+    pickle_barrel = pickle.dumps({'peer':encryption_prep}).encode('base64', 'strict')
+    sockfd.send(pickle_barrel)
+
+def accept_peer_connection(pack, sock):
+    print "send chached message"
+    pack = json.loads(pack['peer'])
+    for x in MESSAGE_QUEUE:
+        if pack['peer'] == x['recipient']:
+            x['Nb+1'] = pack['Nb']+1
+            encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
+            pickled_packet = pickle.dumps({'message': encryption_prep}).encode('base64', 'strict')
+            sock.send(pickled_packet)
+
+            break
+
+
+
 
 
 
@@ -338,6 +351,7 @@ def chat_client(args):
     input_thread = threading.Thread(target=read_stdin, args=(input_queue,))
     input_thread.daemon = True
     input_thread.start()
+    counter = 0
     while 1:
 
         # get the list sockets which are ready to be read through select
@@ -347,16 +361,20 @@ def chat_client(args):
 
 
         for sock in ready_to_read:
+            print 'cycle number'
+            counter+=1
+            print counter
             if sock == receiving_socket:
                 print "got the listener"
                 #verify new connection
                 sockfd, addr = receiving_socket.accept()
-                new_peer = json.loads(sockfd.recv(RECV_BUFFER))
+                new_peer = pickle.loads(sockfd.recv(RECV_BUFFER).decode('base64', 'strict'))
                 print "connected to new peer"
                 print new_peer
                 #This needs to move into its own function to be easier to find
                 confirm_with_server(new_peer)
-                sockfd.send(json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': random.randint(EX,P), 'Nb': random.randint(0,65535)}))
+                server_legitimizes(new_peer, sockfd)
+
                 #this is accepting connections regardless at the moment
 
                 SOCKET_LIST.append(sockfd)
@@ -374,6 +392,7 @@ def chat_client(args):
                         sys.stdout.write("\n"); sys.stdout.flush()
                         pack = pickle.loads(data.decode('base64', 'strict'))
                         #pack = json.loads(pickled_data)
+                        print pack
                         for key in pack:
                             if False: #key == 'placeholderbecauseImtoolazytorewriteanything':
                                 print 'im surprised'
@@ -388,27 +407,26 @@ def chat_client(args):
                                 # step 2 in peer connection
                                 #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
                                 #initiator check first nonce
-                                if pack[key]['Na+1'] == Server_Nonce+1:
-                                    connect_to_peer(args, pack)
-                                else:
-                                    print "bad nonce"
-
+                                #if pack[key]['Na+1'] == Server_Nonce+1:
+                                connect_to_peer(args, pack)
                             elif key == 'peer':
                                 #step 4, peer confirmed with server that we are legit, sending messages
                                 print "final confirmation"
-                                if pack['Na+1'] == Peer_Nonce+1:
-                                    accept_peer_connection(pack, sock)
-                                else:
-                                    print "bad nonce 2"
-                                    print pack['Na+1']
-                                    print Peer_Nonce
+                                # if pack['Na+1'] == Peer_Nonce+1:
+                                accept_peer_connection(pack, sock)
+                                # else:
+                                #     print "bad nonce 2"
+                                #     print pack['Na+1']
+                                #     print Peer_Nonce
+                            # elif key == 'peer_confirmation':
+                            #     server_legitimizes(pack)
 
                         else:
                             print 'runoff'
                             #print pack
                         #this is probably temporary
                         #print PEER_LIST
-                        #sys.stdout.write(data)
+                        #print pack
                         sys.stdout.flush()
                         sys.stdout.write('\n[ME] >'); sys.stdout.flush()
                     else:
