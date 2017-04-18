@@ -160,9 +160,22 @@ def check_expired_tgt (tgt) :
 
 def fetch_clients(sock, req):
     print CLIENT_LIST
+    name = req['ask']
+    key = USER_LIST[name]['session_key']
+    tag = req['TAG']
+    iv = req['IV']
+    print 'keys'
+    decryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(iv, tag),
+                    backend=default_backend()
+                    ).decryptor()
+    plaintext =  decryptor.update(req['list_please']) + decryptor.finalize()
+    plaintext = json.loads(plaintext)
     list_answer = {}
+    print "keys 2"
     for key in CLIENT_LIST:
-        if key == req['list_please']:
+        if key == plaintext['ask']:
             list_answer[key] = CLIENT_LIST[key]
         else:
             list_answer[key] = CLIENT_LIST[key]['ADDRESS']
@@ -257,8 +270,9 @@ def chat_server():
                 usersionkey = USER_LIST[user_name]['session_key']
 
                 #cipherskey = encryptor.update(usersionkey) + encryptor.finalize()
-                cipherkt = {'TGT' : repr(tgt), 'session_key' : repr(usersionkey), 'Na+1': decrypted_puzz_packet['Na']+1}
-                cipherkt = encryptor.update(json.dumps(cipherkt)) + encryptor.finalize()
+                cipherkt = {'TGT' : repr(tgt), 'session_key' : usersionkey, 'Na+1': decrypted_puzz_packet['Na']+1}
+                cipherkt = pickle.dumps(cipherkt)
+                cipherkt = encryptor.update(base64.b64encode(cipherkt)) + encryptor.finalize()
                 cipherkt_packet_pickle = cipherkt
 
                 tagkey = encryptor.tag
@@ -266,7 +280,7 @@ def chat_server():
                 accept_user_packet = {'accepted': {'acceptance':cipherkt_packet_pickle, 'tag':tagkey, 'IV':user_iv}}
                 print 'SESSION PACKET'
                 traveler = pickle.dumps(accept_user_packet)
-                traveler = traveler.encode('base64', 'strict')
+                traveler = base64.b64encode(traveler)
                 # print traveler
                 sockfd.send(traveler)
 
