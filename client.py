@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import dh
 import base64
 import pickle
+import pyDH
 
 backend = default_backend()
 
@@ -39,13 +40,10 @@ PORT = random.randint(0,65535)
 MESSAGE_QUEUE = []
 Server_Nonce = 0
 Peer_Nonce = 0
-parameters = dh.generate_parameters(generator=2, key_size=512,
-                                     backend=default_backend())
-private = parameters.generate_private_key()  ## This is "a" for alice
-dh_public_key = private.public_key() ##This is g^a MOD P
 
-#shared_dh = private.exchange(bob_public_key)
-DH_SHARED=0
+DH_PRIV = 0#pyDH.DiffieHellman()
+DH_PUB = 0#DH_PRIV.gen_public_key()
+DH_SHARED = 0 #DH_PRIV.gen_shared_key(DH_PUB)
 
 
 MASTER_IV = os.urandom(12)
@@ -219,6 +217,7 @@ def send_command(msg):
     for name in PEER_SOCKETS:
         if sending[1] == name:
             print "sending to existing peer"
+            #aes_key = alice_shared_key[0:32]
             # key = PEER_LIST[name]['encryption_key']
             # iv = os.urandom(32)
             # encryptor = Cipher(
@@ -280,7 +279,10 @@ def connect_to_peer(args, connection_packet):
     forwarded_message = {'return_to_server':pack['peer_packet']}
     forwarded_message['peer'] = args.user
     forwarded_message['Na'] = Peer_Nonce
-    forwarded_message['g^a mod p'] = repr(dh_public_key)
+    #der format
+    DH_PRIV = pyDH.DiffieHellman()
+    DH_PUB = DH_PRIV.gen_public_key()
+    forwarded_message['g^a mod p'] = DH_PUB
     encryption_prep = pickle.dumps(forwarded_message).encode('base64', 'strict')
     pickle_barrel = pickle.dumps({'peer':encryption_prep}).encode('base64', 'strict')
     new_peer_socket.send(pickle_barrel)
@@ -305,24 +307,34 @@ def confirm_with_server(connection_message):
     pickled_packet = pickle.dumps(ready).encode('base64', 'strict')
     PEER_SOCKETS['server'].send(pickled_packet)
 
-def server_legitimizes(new_peer, sockfd):
+
+def server_legitimizes(new_peer, sockfd, addr):
     print 'responding to hopeful peer'
     new_peer = pickle.loads(new_peer['peer'].decode('base64', 'strict'))
-    encryption_prep = pickle.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': repr(dh_public_key), 'Nb': random.randint(0,65535)}).encode('base64', 'strict')
+    print PEER_LIST
+    PEER_SOCKETS[new_peer['peer']] = sockfd
+    PEER_LIST[new_peer['peer']] ={'ADDRESS':  addr }
+    DH_PRIV = pyDH.DiffieHellman()
+    DH_PUB = DH_PRIV.gen_public_key()
+    DH_SHARED = DH_PRIV.gen_shared_key(new_peer['g^a mod p'])
+    PEER_LIST[new_peer['peer']]['encryption_key'] = DH_SHARED
+    encryption_prep = pickle.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': DH_PUB, 'Nb': random.randint(0,65535)}).encode('base64', 'strict')
     pickle_barrel = pickle.dumps({'buddy':encryption_prep}).encode('base64', 'strict')
     sockfd.send(pickle_barrel)
+
 
 def accept_peer_connection(pack, sock):
     print "send chached message"
     pack = json.loads(pack['peer'])
+    print pack
     name = pack['peer']
-    bob_public_key = pack['g^a mod p']
-    DH_SHARED = private.exchange(bob_public_key)
+    DH_SHARED = DH_PRIV.gen_shared_key(pack['g^a mod p'])
+    PEER_LIST[name]['encryption_key'] = DH_SHARED
     for x in MESSAGE_QUEUE:
         if name == x['recipient']:
             x['Nb+1'] = pack['Nb']+1
             encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
-            # key = PEER_LIST[name][encryption_key]
+            # key = PEER_LIST[name]['encryption_key']
             # iv = os.urandom(32)
         #   encryptor = Cipher(
         #                 algorithms.AES(key),
@@ -412,14 +424,14 @@ def chat_client(args):
                 print "connected to new peer"
                 print new_peer
                 #This needs to move into its own function to be easier to find
+                SOCKET_LIST.append(sockfd)
+
                 confirm_with_server(new_peer)
-                server_legitimizes(new_peer, sockfd)
+                server_legitimizes(new_peer, sockfd, addr)
 
                 #this is accepting connections regardless at the moment
 
-                SOCKET_LIST.append(sockfd)
-                PEER_SOCKETS[new_peer['peer']] = sockfd
-                PEER_LIST[new_peer['peer']] = addr
+
 
 
         # process data recieved from client,
@@ -449,7 +461,7 @@ def chat_client(args):
                                 #initiator check first nonce
                                 #if pack[key]['Na+1'] == Server_Nonce+1:
                                 connect_to_peer(args, pack)
-                            elif key == 'peer':
+                            elif key == 'buddy':
                                 #step 4, peer confirmed with server that we are legit, sending messages
                                 print "final confirmation"
                                 # if pack['Na+1'] == Peer_Nonce+1:
