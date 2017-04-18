@@ -172,7 +172,6 @@ def solve_puzzle(args, pack):
 
 
     aes_packet = {'solution' : cipherpuzzle, 'iv' : MASTER_IV, 'tag' : tag}
-    #print json.dumps(aes_packet, ensure_ascii=False)
     aes_packet_pickle = pickle.dumps(aes_packet).encode('base64', 'strict')
 
 
@@ -197,7 +196,6 @@ def receive_session_key(args, data):
 
 
     decrypted_packet = json.loads(decryptor.update(kt_packet) + decryptor.finalize())
-    print decrypted_packet
     #add nonce check
     PEER_LIST['server']['session_key'] = decrypted_packet['session_key']
     PEER_LIST[args.user]['TGT'] = decrypted_packet['TGT']
@@ -210,6 +208,7 @@ def receive_session_key(args, data):
 
 def list_command():
     print("received list command")
+
     print PEER_LIST
 
 
@@ -219,16 +218,19 @@ def send_command(msg):
     for name in PEER_SOCKETS:
         if sending[1] == name:
             print "sending to existing peer"
-            #aes_key = alice_shared_key[0:32]
-            # key = PEER_LIST[name]['encryption_key']
-            # iv = os.urandom(32)
-            # encryptor = Cipher(
-    #                 algorithms.AES(key),
-    #                 modes.GCM(user_iv),
-    #                 backend=default_backend()
-    #                 ).encryptor()
+            key = make_aes_key(PEER_LIST[name]['encryption_key'])
+            iv = os.urandom(32)
+            encryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(iv),
+                    backend=default_backend()
+                    ).encryptor()
             encryption_prep = json.dumps({'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}})
-            PEER_SOCKETS[name].send()
+            cipherkt = encryptor.update(json.dumps(encryption_prep)) + encryptor.finalize()
+            tagkey = encryptor.tag
+
+            pickled_packet = pickle.dumps({'p2p': cipherkt, 'IV': iv, 'TAG':tagkey, 'from': args.user})
+            sock.send(base64.b64encode(pickled_packet))
     else:
         print "need to connect to new peer"
         #step 1 in confirming a new peer
@@ -238,7 +240,7 @@ def send_command(msg):
 
 def format_peer_communication(message):
     print 'cache message for later'
-    packet = {'recipient':message[1], 'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": message[2:]}}
+    packet = {'recipient':message[1], 'packet':{"origin": args.user, "message": message[2:]}}
     MESSAGE_QUEUE.append(packet)
 
 
@@ -318,7 +320,6 @@ def server_legitimizes(new_peer, sockfd, addr):
     global DH_PUB
     global DH_SHARED
     new_peer = pickle.loads(new_peer['peer'].decode('base64', 'strict'))
-    print PEER_LIST
     PEER_SOCKETS[new_peer['peer']] = sockfd
     PEER_LIST[new_peer['peer']] ={'ADDRESS':  addr }
     DH_PRIV = pyDH.DiffieHellman()
@@ -337,7 +338,6 @@ def accept_peer_connection(args, pack, sock):
     global DH_PUB
     global DH_SHARED
     pack = pickle.loads(pack['buddy'].decode('base64', 'strict'))
-    print pack
     name = pack['peer']
     DH_SHARED = DH_PRIV.gen_shared_key(pack['g^b mod p'])
     PEER_LIST[name]['encryption_key'] = DH_SHARED
@@ -358,18 +358,19 @@ def accept_peer_connection(args, pack, sock):
             cipherkt = encryptor.update(json.dumps(encryption_prep)) + encryptor.finalize()
             tagkey = encryptor.tag
 
-            pickled_packet = pickle.dumps({'p2p': encryption_prep, 'IV': iv, 'TAG': base64.b64encode(tagkey), 'from': args.user}).encode('base64', 'strict')
-            sock.send(pickled_packet)
-            sock.send(base64.b64encode(tagkey))
+            pickled_packet = pickle.dumps({'p2p': cipherkt, 'IV': iv, 'TAG':tagkey, 'from': args.user})
+            sock.send(base64.b64encode(pickled_packet))
 
             break
 
 def decode_p2p(pack, sock):
     print 'p2p decoding'
-    #print pack
+    print pack
     name = pack['from']
     key = make_aes_key(PEER_LIST[name]['encryption_key'])
-    tag = sock.recv(RECV_BUFFER)
+
+    tag = pack['TAG']
+
     iv = pack['IV']
     decryptor = Cipher(
                     algorithms.AES(key),
@@ -463,7 +464,7 @@ def chat_client(args):
                     if data:
                         #make titles for data packets for sorting and use
                         sys.stdout.write("\n"); sys.stdout.flush()
-                        pack = pickle.loads(data.decode('base64', 'strict'))
+                        pack = pickle.loads(base64.b64decode(data))
                         #pack = json.loads(pickled_data)
                         print pack
                         for key in pack:

@@ -14,6 +14,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import pickle
+import math
 
 
 def arguments(arglist):
@@ -49,7 +50,7 @@ USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1',
             'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': carole_session_key},
             'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': eve_session_key}}
 
-PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
+PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4, 100:25, 500:95, 1000:168, 1500:239, 10**5:9592, 10**6:78498, 10**7:664697}
 RECV_BUFFER = 8192
 PORT = args.port
 
@@ -284,6 +285,7 @@ def chat_server():
                                 connect_user_to_peer(request)
                             elif key == 'peer_confirmation':
                                 confirm_connection(request)
+
 
 
                         #'peer_confirmation'
