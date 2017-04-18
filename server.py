@@ -14,6 +14,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 import base64
 import pickle
+import math
 
 
 def arguments(arglist):
@@ -49,7 +50,7 @@ USER_LIST ={'Alice': {'password':'awesome','master_key':42,'IPaddr':'127.0.0.1',
             'Carole': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': carole_session_key},
             'Eve': {'password': 'awesome', 'master_key': 42, 'IPaddr': '127.0.0.1', 'session_key': eve_session_key}}
 
-PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4}
+PUZZLE_ANSWERS = {5 : 3, 8 : 4, 10 : 4, 100:25, 500:95, 1000:168, 1500:239, 10**5:9592, 10**6:78498, 10**7:664697}
 RECV_BUFFER = 8192
 PORT = args.port
 
@@ -100,13 +101,13 @@ def connect_user_to_peer(request):
     # print request
     unpack = request['request']
 
-    user = unpack['tgt']
+    user = unpack['TGT']
     peer = unpack['name']
     Na = unpack['Na'] + 1
     shared_secret= random.randint(0,65535)
     #packet to be sent back to client
     #{Kab || {Kab || Ns || TGT(bob)}bmk || Na+1 }Sa
-    peer_encryption = json.dumps({'Kab': shared_secret, 'Ns': random.randint(0,65535),  'tgt': peer})
+    peer_encryption = json.dumps({'Kab': shared_secret, 'Ns': random.randint(0,65535),  'TGT': peer})
     #encrypt this
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = pickle.dumps({'connection': prep}).encode('base64', 'strict')
@@ -118,7 +119,7 @@ def confirm_connection(request):
     print "peer 2 wants confirmation"
 
     packet = json.loads(request['peer_confirmation'])
-    peer = packet['tgt']
+    peer = packet['TGT']
     confirmation = {'Nb+1': packet['Nb']+1}
     encryption_prep = json.dumps(confirmation)
     pickle_barrel = pickle.dumps({'gtg': encryption_prep}).encode('base64', 'strict')
@@ -203,6 +204,7 @@ def chat_server():
                 print 'aes packet'
                 # print aes_packet
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
+
                 crypt_answer = aes_packet_pickle['solution']
                 user_iv = aes_packet_pickle['iv']
                 user_tag = aes_packet_pickle['tag']
@@ -283,6 +285,7 @@ def chat_server():
                                 connect_user_to_peer(request)
                             elif key == 'peer_confirmation':
                                 confirm_connection(request)
+
 
 
                         #'peer_confirmation'
