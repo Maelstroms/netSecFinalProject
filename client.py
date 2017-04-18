@@ -241,7 +241,7 @@ def send_command(msg):
             tagkey = encryptor.tag
 
             pickled_packet = pickle.dumps({'p2p': cipherkt, 'IV': iv, 'TAG':tagkey, 'from': args.user})
-            sock.send(base64.b64encode(pickled_packet))
+            PEER_SOCKETS[name].send(base64.b64encode(pickled_packet))
     else:
         print "need to connect to new peer"
         #step 1 in confirming a new peer
@@ -385,7 +385,9 @@ def decode_p2p(pack, sock):
                     backend=default_backend()
                     ).decryptor()
     plaintext =  decryptor.update(pack['p2p']) + decryptor.finalize()
-    print plaintext
+    plaintext = json.loads(plaintext)
+
+    print ' '.join(plaintext['packet']['message'])
 
 
 
@@ -442,9 +444,6 @@ def chat_client(args):
 
 
         for sock in ready_to_read:
-            print 'cycle number'
-            counter+=1
-            print counter
             if sock == receiving_socket:
                 print "got the listener"
                 #verify new connection
@@ -501,7 +500,7 @@ def chat_client(args):
                             elif key == 'peers_listed':
                                 print pack[key]
 
-                        else:
+
                         sys.stdout.flush()
                         sys.stdout.write('\n[ME] >'); sys.stdout.flush()
                     else:
