@@ -39,9 +39,14 @@ PORT = random.randint(0,65535)
 MESSAGE_QUEUE = []
 Server_Nonce = 0
 Peer_Nonce = 0
-P = 5 #needs to change
-EX = 3 #os.urandom(32)
-G =2
+parameters = dh.generate_parameters(generator=2, key_size=512,
+                                     backend=default_backend())
+private = parameters.generate_private_key()  ## This is "a" for alice
+dh_public_key = private.public_key() ##This is g^a MOD P
+
+#shared_dh = private.exchange(bob_public_key)
+DH_SHARED=0
+
 
 MASTER_IV = os.urandom(12)
 MASTER_PASSWORD = 'awesome'
@@ -214,8 +219,8 @@ def send_command(msg):
     for name in PEER_SOCKETS:
         if sending[1] == name:
             print "sending to existing peer"
-            key = PEER_LIST[name][encryption_key]
-            iv = os.urandom(32)
+            # key = PEER_LIST[name]['encryption_key']
+            # iv = os.urandom(32)
             # encryptor = Cipher(
     #                 algorithms.AES(key),
     #                 modes.GCM(user_iv),
@@ -275,8 +280,8 @@ def connect_to_peer(args, connection_packet):
     forwarded_message = {'return_to_server':pack['peer_packet']}
     forwarded_message['peer'] = args.user
     forwarded_message['Na'] = Peer_Nonce
-    forwarded_message['g^a mod p'] = random.randint(EX,P)
-    encryption_prep = json.dumps(forwarded_message)
+    forwarded_message['g^a mod p'] = repr(dh_public_key)
+    encryption_prep = pickle.dumps(forwarded_message).encode('base64', 'strict')
     pickle_barrel = pickle.dumps({'peer':encryption_prep}).encode('base64', 'strict')
     new_peer_socket.send(pickle_barrel)
 
@@ -288,7 +293,7 @@ def confirm_with_server(connection_message):
     print "ask server for legitimacy"
     # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
     #{Ns+1 || TGT(bob) || Nb}Sb
-    message_from_A = json.loads(connection_message['peer'])
+    message_from_A = pickle.loads(connection_message['peer'].decode('base64', 'strict'))
     message_to_server = json.loads(message_from_A['return_to_server'])
     message_to_server['Ns'] = message_to_server['Ns']+1
     Peer_Nonce = random.randint(0,65535)
@@ -302,21 +307,23 @@ def confirm_with_server(connection_message):
 
 def server_legitimizes(new_peer, sockfd):
     print 'responding to hopeful peer'
-    new_peer = json.loads(new_peer['peer'])
-    encryption_prep = json.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': random.randint(EX,P), 'Nb': random.randint(0,65535)})
-    pickle_barrel = pickle.dumps({'peer':encryption_prep}).encode('base64', 'strict')
+    new_peer = pickle.loads(new_peer['peer'].decode('base64', 'strict'))
+    encryption_prep = pickle.dumps({'peer': args.user, 'Na+1': new_peer['Na']+1, 'g^b mod p': repr(dh_public_key), 'Nb': random.randint(0,65535)}).encode('base64', 'strict')
+    pickle_barrel = pickle.dumps({'buddy':encryption_prep}).encode('base64', 'strict')
     sockfd.send(pickle_barrel)
 
 def accept_peer_connection(pack, sock):
     print "send chached message"
     pack = json.loads(pack['peer'])
     name = pack['peer']
+    bob_public_key = pack['g^a mod p']
+    DH_SHARED = private.exchange(bob_public_key)
     for x in MESSAGE_QUEUE:
         if name == x['recipient']:
             x['Nb+1'] = pack['Nb']+1
             encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
-            key = PEER_LIST[name][encryption_key]
-            iv = os.urandom(32)
+            # key = PEER_LIST[name][encryption_key]
+            # iv = os.urandom(32)
         #   encryptor = Cipher(
         #                 algorithms.AES(key),
         #                 modes.GCM(user_iv),
@@ -332,7 +339,7 @@ def accept_peer_connection(pack, sock):
 
 def decode_p2p(pack):
     print pack
-    key = PEER_LIST[name][encryption_key]
+    #key = PEER_LIST[name][encryption_key]
     # tag = pack['TAG']
     # iv = pack['IV']
     # decryptor = Cipher(
