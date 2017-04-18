@@ -118,7 +118,7 @@ def confirm_connection(request):
     print "peer 2 wants confirmation"
 
     packet = json.loads(request['peer_confirmation'])
-    peer = packet['tgt']
+    peer = packet['TGT']
     confirmation = {'Nb+1': packet['Nb']+1}
     encryption_prep = json.dumps(confirmation)
     pickle_barrel = pickle.dumps({'gtg': encryption_prep}).encode('base64', 'strict')
