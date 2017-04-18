@@ -203,8 +203,11 @@ def receive_session_key(args, data):
     print 'Connected to remote server. You can start sending messages'
 
 
-def list_command():
+def list_command(args):
     print("received list command")
+    #{LIST || TGT || Na}Sa
+    Na = random.randint(0,65535)
+    listPack = {'TGT':PEER_LIST[args.user]['TGT'],'Na': Na}
     print PEER_LIST
 
 
@@ -493,7 +496,9 @@ def chat_client(args):
             #print msg
             if str(msg) == "list\n":
                 #received list command
-                list_command()
+                #{LIST || TGT || Na}Sa
+
+                list_command(args)
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
             elif str(msg[:4]) == "send":
                 print("got send command")
