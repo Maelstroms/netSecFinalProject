@@ -54,9 +54,6 @@ digest.update(b"awesome")
 MASTER_HASH = digest.finalize()
 MASTER_KEY = MASTER_HASH
 
-#for testing P2P encryption
-USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
-'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
 
 def make_aes_key(key):
     return key[0:32]
@@ -195,9 +192,9 @@ def receive_session_key(args, data):
                     ).decryptor()
 
 
-    decrypted_packet = json.loads(decryptor.update(kt_packet) + decryptor.finalize())
+    decrypted_packet = pickle.loads(base64.b64decode(decryptor.update(kt_packet) + decryptor.finalize()))
     #add nonce check
-    PEER_LIST['server']['session_key'] = decrypted_packet['session_key']
+    PEER_LIST['server']['encryption_key'] = decrypted_packet['session_key']
     PEER_LIST[args.user]['TGT'] = decrypted_packet['TGT']
 
 
@@ -206,10 +203,24 @@ def receive_session_key(args, data):
     print 'Connected to remote server. You can start sending messages'
 
 
-def list_command():
+def list_command(args):
     print("received list command")
+    #PEER_LIST['server']
+    key = make_aes_key(PEER_LIST['server']['encryption_key'])
+    print key
+    print len(key)
+    iv = os.urandom(12)
+    encryptor = Cipher(
+                        algorithms.AES(key),
+                        modes.GCM(iv),
+                        backend=default_backend()
+                        ).encryptor()
+    encryption_prep = {'ask':args.user}
+    cipherkt = encryptor.update(json.dumps(encryption_prep)) + encryptor.finalize()
+    tagkey = encryptor.tag
+    pickled_packet = pickle.dumps({'list_please':cipherkt, 'IV':iv, 'TAG':tagkey, 'ask':args.user})
+    PEER_SOCKETS['server'].send(base64.b64encode(pickled_packet))
 
-    print PEER_LIST
 
 
 def send_command(msg):
@@ -219,13 +230,13 @@ def send_command(msg):
         if sending[1] == name:
             print "sending to existing peer"
             key = make_aes_key(PEER_LIST[name]['encryption_key'])
-            iv = os.urandom(32)
+            iv = os.urandom(12)
             encryptor = Cipher(
                     algorithms.AES(key),
                     modes.GCM(iv),
                     backend=default_backend()
                     ).encryptor()
-            encryption_prep = json.dumps({'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}})
+            encryption_prep = {'packet':{"origin": [args.user, PEER_LIST[args.user]], "message": sending[2:]}}
             cipherkt = encryptor.update(json.dumps(encryption_prep)) + encryptor.finalize()
             tagkey = encryptor.tag
 
@@ -344,12 +355,12 @@ def accept_peer_connection(args, pack, sock):
     for x in MESSAGE_QUEUE:
         if name == x['recipient']:
             x['Nb+1'] = pack['Nb']+1
-            encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
+            encryption_prep = MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x))
 
             #dh makes 2048 bit dh key, aes only takes 512
             key = make_aes_key(PEER_LIST[name]['encryption_key'])
 
-            iv = os.urandom(32)
+            iv = os.urandom(12)
             encryptor = Cipher(
                         algorithms.AES(key),
                         modes.GCM(iv),
@@ -494,6 +505,9 @@ def chat_client(args):
                                 #     print Peer_Nonce
                             elif key == 'p2p':
                                 decode_p2p(pack, sock)
+                            elif key == 'peers_listed':
+                                print pack[key]
+                                # PEER_LIST =
 
                         else:
                             print 'runoff'
@@ -523,7 +537,7 @@ def chat_client(args):
             #print msg
             if str(msg) == "list\n":
                 #received list command
-                list_command()
+                list_command(args)
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
             elif str(msg[:4]) == "send":
                 print("got send command")
