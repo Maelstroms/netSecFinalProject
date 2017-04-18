@@ -206,9 +206,11 @@ def receive_session_key(args, data):
     print 'Connected to remote server. You can start sending messages'
 
 
-def list_command():
+def list_command(args):
     print("received list command")
-
+    #PEER_LIST['server']
+    pickled_packet = pickle.dumps({'list_please':args.user})
+    PEER_SOCKETS['server'].send(base64.b64encode(pickled_packet))
     print PEER_LIST
 
 
@@ -494,6 +496,9 @@ def chat_client(args):
                                 #     print Peer_Nonce
                             elif key == 'p2p':
                                 decode_p2p(pack, sock)
+                            elif key == 'peers_listed':
+                                print pack[key]
+                                # PEER_LIST =
 
                         else:
                             print 'runoff'
@@ -523,7 +528,7 @@ def chat_client(args):
             #print msg
             if str(msg) == "list\n":
                 #received list command
-                list_command()
+                list_command(args)
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
             elif str(msg[:4]) == "send":
                 print("got send command")

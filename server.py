@@ -148,6 +148,7 @@ def create_new_tgt (username) :
 
     return cipher_TGT, [tgt_encryption_tag]
 
+
 #check_expired_tgt : TGT -> TGT
 #GIVEN : TGT
 #RETURNS : Checks if the current TGT is expired or not, if expired then creates a new TGT else returns the same
@@ -156,6 +157,19 @@ def check_expired_tgt (tgt) :
         return create_new_tgt(tgt[0])
     else :
         return tgt
+
+def fetch_clients(sock, req):
+    print CLIENT_LIST
+    list_answer = {}
+    for key in CLIENT_LIST:
+        if key == req['list_please']:
+            list_answer[key] = CLIENT_LIST[key]
+        else:
+            list_answer[key] = CLIENT_LIST[key]['ADDRESS']
+    pickle_barrel = pickle.dumps({'peers_listed':list_answer})
+    sock.send(base64.b64encode(pickle_barrel))
+
+
 
 def chat_server():
 
@@ -274,7 +288,7 @@ def chat_server():
                     data = sock.recv(RECV_BUFFER)
                     if data:
                         print 'data data'
-                        request = pickle.loads(data.decode('base64', 'strict'))
+                        request = pickle.loads(base64.b64decode(data))
                         # request = json.loads(data)
                         print request
                         #received request to connect to peer
@@ -285,7 +299,9 @@ def chat_server():
                                 connect_user_to_peer(request)
                             elif key == 'peer_confirmation':
                                 confirm_connection(request)
-
+                            elif key == 'list_please':
+                                print "list requested"
+                                fetch_clients(sock, request)
 
 
                         #'peer_confirmation'
