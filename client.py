@@ -58,6 +58,8 @@ MASTER_KEY = MASTER_HASH
 USER_LIST ={'Alice': {'password':'awesome','server_master_key':42,'IPaddr':'127.0.0.1','session_key':54784},
 'Bob': {'password':'awesome','server_master_key':69,'IPaddr':'127.0.0.1','session_key':54784}}
 
+def make_aes_key(key):
+    return key[0:32]
 
 def encryptor(key,iv,plaintext):
 
@@ -254,6 +256,8 @@ def find_peer_from_server(args, peer_name):
 def connect_to_peer(args, connection_packet):
     print "connecting to peer"
     global Peer_Nonce
+    global DH_PRIV
+    global DH_PUB
     # {Kab || Ns ||TGT(bob)}bmk || {Na}Kab
     pack = connection_packet['connection']
     name = pack['peer'][0]
@@ -310,6 +314,9 @@ def confirm_with_server(connection_message):
 
 def server_legitimizes(new_peer, sockfd, addr):
     print 'responding to hopeful peer'
+    global DH_PRIV
+    global DH_PUB
+    global DH_SHARED
     new_peer = pickle.loads(new_peer['peer'].decode('base64', 'strict'))
     print PEER_LIST
     PEER_SOCKETS[new_peer['peer']] = sockfd
@@ -323,42 +330,56 @@ def server_legitimizes(new_peer, sockfd, addr):
     sockfd.send(pickle_barrel)
 
 
-def accept_peer_connection(pack, sock):
+
+def accept_peer_connection(args, pack, sock):
     print "send chached message"
-    pack = json.loads(pack['peer'])
+    global DH_PRIV
+    global DH_PUB
+    global DH_SHARED
+    pack = pickle.loads(pack['buddy'].decode('base64', 'strict'))
     print pack
     name = pack['peer']
-    DH_SHARED = DH_PRIV.gen_shared_key(pack['g^a mod p'])
+    DH_SHARED = DH_PRIV.gen_shared_key(pack['g^b mod p'])
     PEER_LIST[name]['encryption_key'] = DH_SHARED
     for x in MESSAGE_QUEUE:
         if name == x['recipient']:
             x['Nb+1'] = pack['Nb']+1
             encryption_prep = json.dumps(MESSAGE_QUEUE.pop(MESSAGE_QUEUE.index(x)))
-            # key = PEER_LIST[name]['encryption_key']
-            # iv = os.urandom(32)
-        #   encryptor = Cipher(
-        #                 algorithms.AES(key),
-        #                 modes.GCM(user_iv),
-        #                 backend=default_backend()
-        #                 ).encryptor()
-            # cipherkt = encryptor.update(json.dumps(cipherkt)) + encryptor.finalize()
-            # tagkey = encryptor.tag
 
-            pickled_packet = pickle.dumps({'p2p': encryption_prep}).encode('base64', 'strict')
+            #dh makes 2048 bit dh key, aes only takes 512
+            key = make_aes_key(PEER_LIST[name]['encryption_key'])
+
+            iv = os.urandom(32)
+            encryptor = Cipher(
+                        algorithms.AES(key),
+                        modes.GCM(iv),
+                        backend=default_backend()
+                        ).encryptor()
+            cipherkt = encryptor.update(json.dumps(encryption_prep)) + encryptor.finalize()
+            tagkey = encryptor.tag
+
+            pickled_packet = pickle.dumps({'p2p': encryption_prep, 'IV': iv, 'TAG': base64.b64encode(tagkey), 'from': args.user}).encode('base64', 'strict')
             sock.send(pickled_packet)
+            sock.send(base64.b64encode(tagkey))
 
             break
 
-def decode_p2p(pack):
-    print pack
-    #key = PEER_LIST[name][encryption_key]
-    # tag = pack['TAG']
-    # iv = pack['IV']
-    # decryptor = Cipher(
-    #                 algorithms.AES(key),
-    #                 modes.GCM(user_iv, user_tag),
-    #                 backend=default_backend()
-    #                 ).decryptor()
+def decode_p2p(pack, sock):
+    print 'p2p decoding'
+    #print pack
+    name = pack['from']
+    key = make_aes_key(PEER_LIST[name]['encryption_key'])
+    tag = sock.recv(RECV_BUFFER)
+    iv = pack['IV']
+    decryptor = Cipher(
+                    algorithms.AES(key),
+                    modes.GCM(iv, tag),
+                    backend=default_backend()
+                    ).decryptor()
+    plaintext =  decryptor.update(pack['p2p']) + decryptor.finalize()
+    print plaintext
+
+
 
 
 
@@ -465,13 +486,13 @@ def chat_client(args):
                                 #step 4, peer confirmed with server that we are legit, sending messages
                                 print "final confirmation"
                                 # if pack['Na+1'] == Peer_Nonce+1:
-                                accept_peer_connection(pack, sock)
+                                accept_peer_connection(args, pack, sock)
                                 # else:
                                 #     print "bad nonce 2"
                                 #     print pack['Na+1']
                                 #     print Peer_Nonce
                             elif key == 'p2p':
-                                decode_p2p(pack)
+                                decode_p2p(pack, sock)
 
                         else:
                             print 'runoff'

@@ -203,6 +203,7 @@ def chat_server():
                 print 'aes packet'
                 # print aes_packet
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
+
                 crypt_answer = aes_packet_pickle['solution']
                 user_iv = aes_packet_pickle['iv']
                 user_tag = aes_packet_pickle['tag']
