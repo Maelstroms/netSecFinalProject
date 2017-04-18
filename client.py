@@ -276,10 +276,7 @@ def connect_to_peer(args, connection_packet):
     name = pack['peer'][0]
     addr =pack['peer'][1]['ADDRESS']
     PEER_LIST[name] = {'ADDRESS': addr}
-    # print name
-    # print addr
-    # print addr[0]
-    # print addr[1]
+
 
     new_peer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     new_peer_socket.settimeout(2)
@@ -376,7 +373,6 @@ def accept_peer_connection(args, pack, sock):
 
 def decode_p2p(pack, sock):
     print 'p2p decoding'
-    print pack
     name = pack['from']
     key = make_aes_key(PEER_LIST[name]['encryption_key'])
 
@@ -442,7 +438,7 @@ def chat_client(args):
         # get the list sockets which are ready to be read through select
         # 4th arg, time_out  = 0 : poll and never block
         ready_to_read,ready_to_write,in_error = select.select(SOCKET_LIST,[],[],0)
-        #print SOCKET_LIST
+
 
 
         for sock in ready_to_read:
@@ -455,7 +451,6 @@ def chat_client(args):
                 sockfd, addr = receiving_socket.accept()
                 new_peer = pickle.loads(sockfd.recv(RECV_BUFFER).decode('base64', 'strict'))
                 print "connected to new peer"
-                print new_peer
                 #This needs to move into its own function to be easier to find
                 SOCKET_LIST.append(sockfd)
 
@@ -476,10 +471,8 @@ def chat_client(args):
                         #make titles for data packets for sorting and use
                         sys.stdout.write("\n"); sys.stdout.flush()
                         pack = pickle.loads(base64.b64decode(data))
-                        #pack = json.loads(pickled_data)
-                        print pack
                         for key in pack:
-                            if False: #key == 'placeholderbecauseImtoolazytorewriteanything':
+                            if False:
                                 print 'im surprised'
                             elif key == 'puzz':
                                 print 'got a puzzle'
@@ -507,14 +500,8 @@ def chat_client(args):
                                 decode_p2p(pack, sock)
                             elif key == 'peers_listed':
                                 print pack[key]
-                                # PEER_LIST =
 
                         else:
-                            print 'runoff'
-                            #print pack
-                        #this is probably temporary
-                        #print PEER_LIST
-                        #print pack
                         sys.stdout.flush()
                         sys.stdout.write('\n[ME] >'); sys.stdout.flush()
                     else:
@@ -525,7 +512,6 @@ def chat_client(args):
 
                             # exception
                 except Exception as inst:
-                    print "we lost our shit"
                     print(type(inst))    # the exception instance
                     print(inst.args)     # arguments stored in .args
                     print(inst)          # __str__ allows args to be printed directly,
@@ -534,7 +520,6 @@ def chat_client(args):
 
         if not input_queue.empty():
             msg = input_queue.get()
-            #print msg
             if str(msg) == "list\n":
                 #received list command
                 list_command(args)
@@ -546,8 +531,7 @@ def chat_client(args):
             elif str(msg[:6]) == "logout":
                 print 'done'
             else:
-                print "did we hit?"
-                #print("Unrecognized command")
+                print("Unrecognized command")
                 sys.stdout.write('[ME] >'); sys.stdout.flush()
 
 

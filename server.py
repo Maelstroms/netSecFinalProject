@@ -112,7 +112,6 @@ def connect_user_to_peer(request):
     prep = {'secret': shared_secret,'peer': [peer, CLIENT_LIST[peer]], 'peer_packet': peer_encryption, 'Na+1': Na}
     packet = pickle.dumps({'connection': prep}).encode('base64', 'strict')
     CLIENT_SOCKETS[user].send(packet)
-    print "all cool"
 
 
 def confirm_connection(request):
@@ -159,7 +158,6 @@ def check_expired_tgt (tgt) :
         return tgt
 
 def fetch_clients(sock, req):
-    print CLIENT_LIST
     name = req['ask']
     key = USER_LIST[name]['session_key']
     tag = req['TAG']
@@ -206,10 +204,8 @@ def chat_server():
         for sock in ready_to_read:
             # a new connection request recieved
             if sock == server_socket:
-                print("got a hit")
                 sockfd, addr = server_socket.accept()
                 newUser = json.loads(sockfd.recv(RECV_BUFFER))
-                # print newUser
                 for name in newUser:
                     CLIENT_LIST[name] = newUser[name]
                 user_name = newUser.keys()[0]
@@ -228,8 +224,6 @@ def chat_server():
 ####################################################################################
 
                 aes_packet =  sockfd.recv(RECV_BUFFER)
-                print 'aes packet'
-                # print aes_packet
                 aes_packet_pickle = pickle.loads(aes_packet.decode('base64', 'strict'))
 
                 crypt_answer = aes_packet_pickle['solution']
@@ -281,7 +275,6 @@ def chat_server():
                 print 'SESSION PACKET'
                 traveler = pickle.dumps(accept_user_packet)
                 traveler = base64.b64encode(traveler)
-                # print traveler
                 sockfd.send(traveler)
 
                 CLIENT_LIST[user_name] = newUser[user_name]
@@ -301,13 +294,10 @@ def chat_server():
                     # receiving data from the socket.
                     data = sock.recv(RECV_BUFFER)
                     if data:
-                        print 'data data'
                         request = pickle.loads(base64.b64decode(data))
-                        # request = json.loads(data)
-                        print request
                         #received request to connect to peer
                         for key in request:
-                            if key == 'placeholderbecauseImtoolazytorewriteanything':
+                            if False:
                                 print 'im surprised'
                             elif key == 'request':
                                 connect_user_to_peer(request)
@@ -330,7 +320,6 @@ def chat_server():
                         # at this stage, no data means probably the connection has been broken
                 # exception
                 except Exception as inst:
-                    print "we lost our shit"
                     print(type(inst))    # the exception instance
                     print(inst.args)     # arguments stored in .args
                     print(inst)          # __str__ allows args to be printed directly,
