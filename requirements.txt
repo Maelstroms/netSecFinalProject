@@ -1,0 +1,4 @@
+####### Requirements without Version Specifiers ######
+cryptography
+base64
+pickle
